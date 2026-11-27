@@ -703,7 +703,7 @@ export class SkyEffectsManager {
       opacity: 0.96,
       depthWrite: false
     });
-    const ribbons = new THREE.InstancedMesh(ribbonGeometry, ribbonMaterial, nodes.length - 1);
+    const ribbons = new THREE.InstancedMesh(ribbonGeometry, ribbonMaterial, nodes.length);
     ribbons.frustumCulled = false;
     const mainColor = new THREE.Color(primaryColor);
     const detailColor = new THREE.Color(accentColor);
