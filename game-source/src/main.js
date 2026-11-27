@@ -262,15 +262,23 @@ class Pipa3DGame {
     document.body.classList.add('character-mode');
     document.getElementById('touch-char-controls')?.classList.remove('hidden');
     document.getElementById('hud-bottom')?.classList.add('hud-hidden');
-    this.camModeIdx = this.cameraModes.findIndex((camera) => camera.id === 'personagem');
-    document.getElementById('label-camera').textContent = this.cameraModes[this.camModeIdx].label;
+    const characterCamera = this.cameraModes.findIndex((camera) => camera.id === 'personagem');
+    if (characterCamera >= 0) this.camModeIdx = characterCamera;
+    const activeCamera = this.cameraModes[this.camModeIdx] || this.cameraModes[0];
+    document.getElementById('label-camera').textContent = activeCamera.label;
     document.getElementById('label-explore').textContent = 'Preparar pipa';
+    this._updateHeldPlayerKite(0.016);
     this._syncLaunchButton();
   }
 
   _syncLaunchButton() {
     const button = document.getElementById('touch-launch');
-    if (button) button.textContent = `🪁 DAR TAPA (${this.launchTapCount}/3)`;
+    if (!button) return;
+    button.textContent = `🪁 DAR TAPA (${this.launchTapCount}/3)`;
+    button.disabled = !this.started || !this.characterMode || !this.playerKiteInHand || this.selectedMap === 'casa';
+    button.title = this.selectedMap === 'casa'
+      ? 'Volte para a laje para empinar.'
+      : 'Clique três vezes, com ritmo, para lançar a pipa.';
   }
 
   _tapPlayerKite() {
@@ -406,7 +414,8 @@ class Pipa3DGame {
       });
     });
 
-    document.getElementById('btn-start-game').addEventListener('click', () => {
+    document.getElementById('btn-start-game').addEventListener('click', (event) => {
+      event.preventDefault();
       this.startGame();
     });
 
@@ -1366,12 +1375,18 @@ class Pipa3DGame {
   startGame() {
     this.sound.init();
     this.started = true;
-    document.getElementById('welcome-modal').classList.add('hidden');
-    document.getElementById('hud-top').classList.remove('hud-hidden');
-    document.getElementById('controls-guide').classList.remove('hud-hidden');
+    document.getElementById('welcome-modal')?.classList.add('hidden');
+    document.getElementById('hud-top')?.classList.remove('hud-hidden');
+    document.getElementById('controls-guide')?.classList.remove('hud-hidden');
     if (!this.playerKiteInHand) this._preparePlayerKiteInHand();
     this._enterPreLaunchMode();
-    this.showBanner('PIPA NA MÃO', 'Caminhe ou corra e dê três tapas com ESPAÇO ou E para colocar a pipa no alto.', 'normal');
+    this._updateCamera(0.04);
+    this._syncLaunchButton();
+    this.showBanner(
+      'PIPA NA MÃO',
+      'Use WASD para andar, SHIFT para correr e clique em DAR TAPA (ou aperte ESPAÇO/E) três vezes para lançar.',
+      'normal'
+    );
   }
 
   cycleCamera() {
