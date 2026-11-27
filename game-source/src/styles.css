@@ -1371,3 +1371,137 @@ button { touch-action: manipulation; }
   .online-choice-grid { grid-template-columns: 1fr; }
   .online-choice-card { min-height: 96px; }
 }
+
+/* Manual rabiola disentangling and kite retrieval */
+.rabiola-lock-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(2, 6, 23, 0.72);
+  backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(9px);
+}
+.rabiola-lock-card {
+  width: min(100%, 520px);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  background: rgba(9, 18, 35, 0.96);
+  border: 1px solid rgba(125, 211, 252, 0.3);
+  border-radius: 20px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+}
+.rabiola-lock-eyebrow {
+  color: #7dd3fc;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+}
+.rabiola-lock-card h2 {
+  font-size: clamp(20px, 4vw, 27px);
+  line-height: 1.1;
+}
+.rabiola-lock-card p {
+  color: #cbd5e1;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.rabiola-lock-pins {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+.rabiola-lock-pin {
+  height: 7px;
+  flex: 1;
+  border-radius: 99px;
+  background: rgba(148, 163, 184, 0.26);
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+.rabiola-lock-pin.done {
+  background: #34d399;
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.38);
+}
+.rabiola-lock-track {
+  position: relative;
+  height: 28px;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(30, 41, 59, 0.98), rgba(51, 65, 85, 0.92));
+  box-shadow: inset 0 3px 9px rgba(0, 0, 0, 0.4);
+}
+.rabiola-lock-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 99px;
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.45), rgba(52, 211, 153, 0.95), rgba(16, 185, 129, 0.45));
+  box-shadow: 0 0 15px rgba(52, 211, 153, 0.55);
+}
+.rabiola-lock-needle {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 3px;
+  border-radius: 4px;
+  background: #f8fafc;
+  box-shadow: 0 0 9px rgba(255, 255, 255, 0.9);
+  transform: translateX(-50%);
+  z-index: 2;
+}
+.rabiola-lock-status {
+  min-height: 20px;
+  color: #facc15 !important;
+  font-size: 12px !important;
+  font-weight: 800;
+  text-align: center;
+}
+.rabiola-lock-action {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid rgba(125, 211, 252, 0.4);
+  border-radius: 12px;
+  color: #082f49;
+  background: linear-gradient(135deg, #7dd3fc, #38bdf8);
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.rabiola-lock-action:active,
+.rabiola-lock-action.pressed {
+  transform: translateY(1px) scale(0.99);
+  filter: brightness(0.9);
+}
+.rabiola-reel-track {
+  height: 13px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.22);
+}
+.rabiola-reel-fill {
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0ea5e9, #34d399);
+  box-shadow: 0 0 14px rgba(52, 211, 153, 0.3);
+  transition: width 0.08s linear;
+}
+.rabiola-lock-foot {
+  color: #94a3b8 !important;
+  font-size: 11px !important;
+  text-align: center;
+}
+@media (max-width: 600px), (pointer: coarse) {
+  .rabiola-lock-overlay { padding: 12px; }
+  .rabiola-lock-card { padding: 19px 16px; gap: 13px; border-radius: 16px; }
+  .rabiola-lock-card p { font-size: 12px; }
+  .rabiola-lock-action { min-height: 54px; }
+}
