@@ -1047,6 +1047,10 @@ class Pipa3DGame {
   }
 
   enterHome() {
+    if (this.gameMode === 'online' || this.multiplayer?.connected) {
+      this.showBanner('SAIA DA SALA ONLINE', 'A casa é uma área individual. Desconecte da sala antes de entrar.', 'danger');
+      return;
+    }
     if (!this.started) this.startGame();
     if (this.selectedMap !== 'casa') this.previousMapBeforeHome = this.selectedMap || 'laje';
     document.getElementById('garage-modal')?.classList.add('hidden');

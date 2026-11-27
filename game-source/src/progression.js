@@ -30,7 +30,7 @@ const HOUSE_DECORATIONS = [
 
 function createDefaultProfile() {
   return {
-    version: 3,
+    version: 4,
     nickname: 'Pipeiro',
     level: 1,
     xp: 0,

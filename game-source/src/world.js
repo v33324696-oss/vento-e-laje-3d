@@ -570,7 +570,7 @@ export class GameWorld {
   setMap(mapId) {
     const valid = ['laje', 'praia', 'parque', 'campinho', 'morro', 'casa'];
     this.mapId = valid.includes(mapId) ? mapId : 'laje';
-    const alwaysVisible = new Set([this.sky, this.hemiLight, this.bounceLight, this.sunLight, this.playerAvatar]);
+    const alwaysVisible = new Set([this.sky, this.hemiLight, this.bounceLight, this.sunLight, this.playerAvatar, this.rainPoints]);
     for (const child of this._baseMapChildren) {
       child.visible = this.mapId === 'laje' || alwaysVisible.has(child);
     }
@@ -1063,6 +1063,16 @@ export class GameWorld {
 
   setHomeDecorations(ids = []) {
     if (!this.homeDecorationGroup) return;
+    this.homeDecorationGroup.traverse((object) => {
+      if (!object.isMesh) return;
+      object.geometry?.dispose();
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      for (const material of materials) {
+        if (material && material !== this.homeBaseMaterials.wood && material !== this.homeBaseMaterials.metal) {
+          material.dispose();
+        }
+      }
+    });
     this.homeDecorationGroup.clear();
     const add = (geometry, material, x, y, z, rotation = 0) => { const mesh = new THREE.Mesh(geometry, material); mesh.position.set(x, y, z); mesh.rotation.y = rotation; mesh.castShadow = true; this.homeDecorationGroup.add(mesh); };
     if (ids.includes('bandeirolas')) [0xef4444, 0xfacc15, 0x22c55e, 0x3b82f6, 0xa855f7].forEach((color, i) => add(new THREE.ConeGeometry(0.34, 0.72, 3), new THREE.MeshStandardMaterial({ color, side: THREE.DoubleSide }), -5.4 + i * 1.1, 3.05 - Math.abs(i - 2) * 0.08, -9.45, Math.PI));
