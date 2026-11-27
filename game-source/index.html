@@ -406,6 +406,7 @@
               <button class="opt-chip active" data-weather="tarde">☀️ Tarde de Sol (15h30)</button>
               <button class="opt-chip" data-weather="pordosol">🌇 Pôr do Sol Dourado (17h45)</button>
               <button class="opt-chip" data-weather="ventania">💨 Manhã de Ventania (09h30)</button>
+              <button class="opt-chip" data-weather="nublado">☁️ Céu Nublado (16h20)</button>
             </div>
           </div>
         </div>
@@ -433,13 +434,31 @@
         <div><small>COLEÇÃO</small><strong id="garage-slot-count">1/3 espaços</strong></div>
         <div><small>MOEDAS</small><strong id="garage-coin-count">250</strong></div>
         <div><small>CONCERTOS</small><strong id="garage-repair-count">0</strong></div>
+        <div><small>APARADAS</small><strong id="garage-recovery-count">0</strong></div>
       </div>
       <div class="garage-section-head">
         <div><span class="section-eyebrow">ESTADO DO SEU EQUIPAMENTO</span><h3>Minhas pipas</h3></div>
         <button id="btn-upgrade-house" class="secondary-cta">AMPLIAR CASA · 850 🪙</button>
       </div>
       <div id="garage-kite-list" class="garage-kite-grid"></div>
-      <p class="garage-note">O vento, as rajadas e as manobras desgastam a estrutura. Faça manutenção para recuperar a resistência e o voo.</p>
+
+      <div class="garage-extra-grid">
+        <section class="garage-feature">
+          <div class="garage-section-head"><div><span class="section-eyebrow">CONQUISTAS DA CARREIRA</span><h3>Prateleira de troféus</h3></div></div>
+          <div id="garage-achievements" class="garage-achievement-list"></div>
+        </section>
+        <section class="garage-feature">
+          <div class="garage-section-head"><div><span class="section-eyebrow">SEU HISTÓRICO</span><h3>Últimos cortes</h3></div></div>
+          <div id="garage-cut-history" class="garage-history-list"></div>
+        </section>
+      </div>
+
+      <section class="garage-feature garage-decor-section">
+        <div class="garage-section-head"><div><span class="section-eyebrow">DEIXE A CASA COM SUA CARA</span><h3>Decorações da laje</h3></div></div>
+        <div id="garage-decoration-list" class="garage-decoration-list"></div>
+      </section>
+
+      <p class="garage-note">O vento, as rajadas e as manobras desgastam a estrutura. Faça manutenção para recuperar a resistência e o voo. As pipas resgatadas ficam registradas na sua coleção.</p>
     </section>
   </div>
 

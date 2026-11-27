@@ -33,7 +33,7 @@ class Pipa3DGame {
     this.started = false;
     this.gameMode = 'festival'; // 'festival' | 'torneio' | 'zen'
     this.matchDifficulty = 'normal';
-    this.weatherOrder = ['tarde', 'pordosol', 'ventania'];
+    this.weatherOrder = ['tarde', 'pordosol', 'ventania', 'nublado'];
     this.weatherIdx = 0;
 
     this.cameraModes = [
@@ -1020,6 +1020,7 @@ class Pipa3DGame {
     set('garage-slot-count', `${house.ownedKites.length}/${house.garageSlots} espaços`);
     set('garage-coin-count', this.progression.profile.coins.toLocaleString('pt-BR'));
     set('garage-repair-count', this.progression.profile.stats.repairs.toLocaleString('pt-BR'));
+    set('garage-recovery-count', house.recoveredKites.length.toLocaleString('pt-BR'));
     const upgrade = document.getElementById('btn-upgrade-house');
     if (upgrade) {
       upgrade.disabled = house.level >= 3;
@@ -1058,6 +1059,52 @@ class Pipa3DGame {
         }
       });
     });
+
+    const decorationList = document.getElementById('garage-decoration-list');
+    if (decorationList) {
+      decorationList.innerHTML = this.progression.getDecorations().map((item) => `
+        <article class="garage-decor-card ${item.owned ? 'owned' : ''}">
+          <div class="garage-decor-icon">${item.icon}</div>
+          <div class="garage-decor-copy"><strong>${item.title}</strong><small>${item.description}</small></div>
+          <button type="button" class="secondary-cta" data-buy-decoration="${item.id}" ${item.owned || !item.available ? 'disabled' : ''}>
+            ${item.owned ? 'INSTALADO' : item.available ? `COMPRAR · ${item.cost} 🪙` : `CASA NÍVEL ${item.houseLevel}`}
+          </button>
+        </article>`).join('');
+      decorationList.querySelectorAll('[data-buy-decoration]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const result = this.progression.buyDecoration(button.dataset.buyDecoration);
+          if (result.ok && !result.alreadyOwned) {
+            this._renderGarage();
+            this._renderCareerHub();
+            this.showBanner('CASA DECORADA!', `${result.item.title} instalada no seu canto.`, 'catch');
+          } else if (!result.ok) {
+            this.showBanner('DECORAÇÃO BLOQUEADA', result.reason, 'danger');
+          }
+        });
+      });
+    }
+
+    const achievements = document.getElementById('garage-achievements');
+    if (achievements) {
+      achievements.innerHTML = this.progression.getAchievements().map((item) => `
+        <article class="garage-achievement ${item.unlocked ? 'unlocked' : ''}">
+          <span>${item.icon}</span><div><strong>${item.title}</strong><small>${item.description}</small></div>
+          <b>${item.unlocked ? 'CONQUISTADO' : 'BLOQUEADO'}</b>
+        </article>`).join('');
+    }
+
+    const history = document.getElementById('garage-cut-history');
+    if (history) {
+      const escapeText = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[char]));
+      history.innerHTML = this.progression.profile.cutHistory.map((entry) => `
+        <article class="garage-history-item">
+          <div><strong>${escapeText(entry.opponent)}</strong><small>${escapeText(entry.technique)} · combo x${entry.combo}</small></div>
+          <b>+${entry.points.toLocaleString('pt-BR')} pts</b>
+          <time>${new Date(entry.at).toLocaleDateString('pt-BR')}</time>
+        </article>`).join('') || '<p class="garage-empty">Seus próximos cortes vão aparecer aqui.</p>';
+    }
   }
 
   _upgradeHouse() {
@@ -1209,7 +1256,7 @@ class Pipa3DGame {
 
   _syncWeatherLabel() {
     const wId = this.weatherOrder[this.weatherIdx];
-    const shortNames = { tarde: 'Tarde', pordosol: 'Pôr do Sol', ventania: 'Ventania' };
+    const shortNames = { tarde: 'Tarde', pordosol: 'Pôr do Sol', ventania: 'Ventania', nublado: 'Nublado' };
     document.getElementById('label-weather').textContent = shortNames[wId] || 'Tarde';
   }
 
@@ -1640,6 +1687,7 @@ class Pipa3DGame {
     if (!session) return;
     const recovered = session.kite;
     const modelName = KITE_MODELS[recovered.modelId]?.name || 'pipa avoada';
+    this.progression.recordRecovery(recovered.modelId);
     recovered.alive = false;
     this.rabiolaLock = null;
     this.rabiolaReelHeld = false;
@@ -2064,6 +2112,13 @@ class Pipa3DGame {
         const basePts = 150 * this.combo;
         const weakLineBonus = loser.lineType.cutPower > winner.lineType.cutPower ? 100 : 0;
         const pts = basePts + weakLineBonus;
+        this.progression.recordCombat({
+          opponent: loser.name,
+          technique: moveName,
+          points: pts,
+          combo: this.combo
+        });
+        this._renderCareerHub();
         this.score += pts;
         const comboLabel = this.combo >= 6 ? 'HEXA' : this.combo === 5 ? 'PENTA' : this.combo === 4 ? 'QUADRA' : this.combo === 3 ? 'TRIPLO' : this.combo === 2 ? 'DUPLO' : '';
         this.combo = Math.min(8, this.combo + 1);

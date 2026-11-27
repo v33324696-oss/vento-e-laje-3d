@@ -17,16 +17,24 @@ const EVENT_REWARDS = {
   tailCut: { xp: 25, coins: 12, stat: 'tailCuts' }
 };
 
+const HOUSE_DECORATIONS = [
+  { id: 'bandeirolas', title: 'Bandeirolas da laje', description: 'Deixe seu canto com a cara do bairro.', icon: '🎏', cost: 250, houseLevel: 1 },
+  { id: 'trofeu_copa', title: 'Troféu do bairro', description: 'Um troféu para marcar suas primeiras conquistas.', icon: '🏆', cost: 650, houseLevel: 2 },
+  { id: 'prateleira', title: 'Prateleira de pipas', description: 'Exiba os modelos que você já conquistou.', icon: '🪁', cost: 900, houseLevel: 2 },
+  { id: 'placa_lenda', title: 'Placa Lenda da Laje', description: 'Uma homenagem para quem chegou ao topo.', icon: '⭐', cost: 1800, houseLevel: 3 }
+];
+
 function createDefaultProfile() {
   return {
-    version: 2,
+    version: 3,
     nickname: 'Pipeiro',
     level: 1,
     xp: 0,
     coins: 250,
     ownedLines: [],
-    stats: { cuts: 0, catches: 0, tailCuts: 0, bestCombo: 1, games: 0, repairs: 0, flightSeconds: 0 },
-    house: { level: 1, garageSlots: 3, visits: 0, ownedKites: ['murcha'], kiteCondition: Object.fromEntries(KITE_IDS.map((id) => [id, 100])) },
+    stats: { cuts: 0, catches: 0, tailCuts: 0, bestCombo: 1, games: 0, repairs: 0, flightSeconds: 0, combatWins: 0, bestCutStreak: 1 },
+    house: { level: 1, garageSlots: 3, visits: 0, ownedKites: ['murcha'], recoveredKites: [], decorations: [], kiteCondition: Object.fromEntries(KITE_IDS.map((id) => [id, 100])) },
+    cutHistory: [],
     missions: MISSION_TEMPLATES.map((mission) => ({ id: mission.id, progress: 0, claimed: false }))
   };
 }
@@ -51,15 +59,26 @@ function normalizeProfile(value) {
       bestCombo: Math.max(1, n(value.stats?.bestCombo, 1, 999)),
       games: n(value.stats?.games, 0),
       repairs: n(value.stats?.repairs, 0),
-      flightSeconds: n(value.stats?.flightSeconds, 0)
+      flightSeconds: n(value.stats?.flightSeconds, 0),
+      combatWins: n(value.stats?.combatWins, 0),
+      bestCutStreak: Math.max(1, n(value.stats?.bestCutStreak, 1, 999))
     },
     house: {
       level: Math.max(1, Math.min(3, n(value.house?.level, 1, 3))),
       garageSlots: Math.max(3, Math.min(7, n(value.house?.garageSlots, 3, 7))),
       visits: n(value.house?.visits, 0),
       ownedKites: [...new Set(['murcha', ...(Array.isArray(value.house?.ownedKites) ? value.house.ownedKites.filter((id) => KITE_IDS.includes(id)) : [])])],
+      recoveredKites: [...new Set(Array.isArray(value.house?.recoveredKites) ? value.house.recoveredKites.filter((id) => KITE_IDS.includes(id)) : [])],
+      decorations: [...new Set(Array.isArray(value.house?.decorations) ? value.house.decorations.filter((id) => HOUSE_DECORATIONS.some((item) => item.id === id)) : [])],
       kiteCondition: Object.fromEntries(KITE_IDS.map((id) => [id, Math.max(0, Math.min(100, Number.isFinite(Number(value.house?.kiteCondition?.[id])) ? Number(value.house.kiteCondition[id]) : 100))]))
     },
+    cutHistory: (Array.isArray(value.cutHistory) ? value.cutHistory : []).slice(0, 8).map((entry) => ({
+      opponent: String(entry?.opponent || 'Pipeiro').replace(/[<>]/g, '').slice(0, 32),
+      technique: String(entry?.technique || 'no relo').replace(/[<>]/g, '').slice(0, 32),
+      points: n(entry?.points, 0, 100000),
+      combo: Math.max(1, n(entry?.combo, 1, 999)),
+      at: n(entry?.at, Date.now())
+    })),
     missions: MISSION_TEMPLATES.map((mission) => {
       const saved = savedMissions.get(mission.id) || {};
       return {
@@ -203,6 +222,72 @@ export class ProgressionStore {
     this.profile.house.garageSlots = Math.min(7, this.profile.house.garageSlots + 2);
     this.save();
     return { ok: true, cost, level: this.profile.house.level };
+  }
+
+  recordRecovery(modelId) {
+    if (!KITE_IDS.includes(modelId)) return false;
+    this.discoverKite(modelId);
+    if (!this.profile.house.recoveredKites.includes(modelId)) {
+      this.profile.house.recoveredKites.push(modelId);
+    }
+    this.save();
+    return true;
+  }
+
+  recordCombat({ opponent, technique, points = 0, combo = 1 } = {}) {
+    const clean = (value, fallback) => String(value || fallback).replace(/[<>]/g, '').trim().slice(0, 32) || fallback;
+    const streak = Math.max(1, Math.min(999, Math.floor(Number(combo) || 1)));
+    this.profile.stats.combatWins += 1;
+    this.profile.stats.bestCutStreak = Math.max(this.profile.stats.bestCutStreak, streak);
+    this.profile.cutHistory.unshift({
+      opponent: clean(opponent, 'Pipeiro'),
+      technique: clean(technique, 'no relo'),
+      points: Math.max(0, Math.min(100000, Math.floor(Number(points) || 0))),
+      combo: streak,
+      at: Date.now()
+    });
+    this.profile.cutHistory = this.profile.cutHistory.slice(0, 8);
+    this.save();
+    return this.profile.cutHistory[0];
+  }
+
+  getAchievements() {
+    const stats = this.profile.stats;
+    const house = this.profile.house;
+    return [
+      { id: 'first_cut', title: 'Primeiro corte', description: 'Faça seu primeiro corte.', icon: '✂️', unlocked: stats.cuts >= 1 },
+      { id: 'five_cuts', title: 'Dono do céu', description: 'Consiga 5 cortes.', icon: '🪁', unlocked: stats.cuts >= 5 },
+      { id: 'first_catch', title: 'Mão de aparador', description: 'Resgate uma pipa avoada.', icon: '🧤', unlocked: stats.catches >= 1 },
+      { id: 'collector', title: 'Colecionador', description: 'Guarde 5 modelos diferentes.', icon: '🎨', unlocked: house.ownedKites.length >= 5 },
+      { id: 'rabico', title: 'Corta-rabiola', description: 'Corte 5 rabiolas.', icon: '〰️', unlocked: stats.tailCuts >= 5 },
+      { id: 'combo', title: 'Sequência braba', description: 'Alcance um combo de 5.', icon: '🔥', unlocked: stats.bestCombo >= 5 },
+      { id: 'home', title: 'Minha quebrada', description: 'Amplie sua casa pela primeira vez.', icon: '🏠', unlocked: house.level >= 2 },
+      { id: 'champion', title: 'Lenda da laje', description: 'Consiga 25 cortes.', icon: '🏆', unlocked: stats.cuts >= 25 }
+    ];
+  }
+
+  getDecorations() {
+    return HOUSE_DECORATIONS.map((item) => ({
+      ...item,
+      owned: this.profile.house.decorations.includes(item.id),
+      available: this.profile.house.level >= item.houseLevel
+    }));
+  }
+
+  buyDecoration(id) {
+    const item = HOUSE_DECORATIONS.find((entry) => entry.id === id);
+    if (!item) return { ok: false, reason: 'Decoração indisponível.' };
+    if (this.profile.house.decorations.includes(id)) return { ok: true, alreadyOwned: true, item };
+    if (this.profile.house.level < item.houseLevel) {
+      return { ok: false, reason: `Amplie a casa para o nível ${item.houseLevel} para instalar essa decoração.` };
+    }
+    if (this.profile.coins < item.cost) {
+      return { ok: false, reason: `Faltam ${item.cost - this.profile.coins} moedas.` };
+    }
+    this.profile.coins -= item.cost;
+    this.profile.house.decorations.push(id);
+    this.save();
+    return { ok: true, item, cost: item.cost };
   }
 
   ownsLine(id) {

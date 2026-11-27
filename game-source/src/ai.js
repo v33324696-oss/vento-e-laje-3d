@@ -39,6 +39,8 @@ export class RivalAIController {
     this.socadaTimer = 0.4 + Math.random() * 0.9;
     this.disbicarTimer = 0.8 + Math.random() * 1.2;
     this.disqueTimer = 1.2 + Math.random() * 1.4;
+    this.attackSide = Math.random() > 0.5 ? 1 : -1;
+    this.approachCount = 0;
     this.respawnTimer = 0;
   }
 
@@ -94,18 +96,31 @@ export class RivalAIController {
 
           if (playerActive && Math.random() < engagePlayerChance) {
             this.focusesPlayer = true;
-            const idx = Math.floor(playerKite.stringNodes.length * (0.68 + Math.random() * 0.25));
+            const segmentBias = this.personality === 'slasher' ? 0.9
+              : this.personality === 'hunter' ? 0.82
+                : this.personality === 'trickster' ? 0.7 : 0.78;
+            const idx = Math.floor(playerKite.stringNodes.length * THREE.MathUtils.clamp(segmentBias + (Math.random() - 0.5) * 0.12, 0.62, 0.97));
             const stringPt = playerKite.stringNodes[idx] || playerKite.position;
             const leadTime = 0.18 + skill * 0.42;
             const spread = Math.max(1.8, 10 / (0.85 + difficulty * 0.72));
+            const side = this.attackSide;
+            this.attackSide *= -1;
+            this.approachCount += 1;
             this.targetPoint.copy(playerKite.position)
               .addScaledVector(playerKite.velocity, leadTime)
               .lerp(stringPt, 0.62)
               .add(_offset.set(
-                (Math.random() - 0.5) * spread,
-                (Math.random() - 0.5) * spread * 0.72,
-                (Math.random() - 0.5) * spread * 0.68
+                side * spread * (this.personality === 'trickster' ? 0.72 : 0.42),
+                (Math.random() - 0.5) * spread * 0.3,
+                -side * spread * 0.18
               ));
+            // Tricksters feint wide before returning to the line; slashers commit
+            // to the higher string section, while hunters pressure the middle.
+            if (this.personality === 'trickster' && this.approachCount % 3 === 0) {
+              this.targetPoint.add(_offset.set(-side * spread * 0.8, 1.1, spread * 0.45));
+            } else if (this.personality === 'slasher') {
+              this.targetPoint.y += 1.2 + skill * 1.4;
+            }
           } else if (allRivals.length > 1 && Math.random() < 0.38) {
             this.focusesPlayer = false;
             const others = allRivals.filter((r) => r.kite !== this.kite && r.kite.active);

@@ -61,7 +61,30 @@ export const WEATHER_PRESETS = {
     fogColor: 0xdbeafe,
     fogDensity: 0.0009,
     baseWind: 12.6,
-    gustStrength: 5.4
+    gustStrength: 5.4,
+    cloudOpacity: 0.76,
+    cloudDrift: 1.15
+  },
+  nublado: {
+    id: 'nublado',
+    name: 'Céu Nublado (16h20)',
+    zenithColor: 0x334155,
+    midSkyColor: 0x64748b,
+    horizonColor: 0xcbd5e1,
+    sunGlowColor: 0xe2e8f0,
+    elevation: 25,
+    azimuth: 132,
+    sunColor: 0xe2e8f0,
+    sunIntensity: 1.2,
+    hemiSky: 0x94a3b8,
+    hemiGround: 0x57534e,
+    hemiIntensity: 0.82,
+    fogColor: 0x94a3b8,
+    fogDensity: 0.00135,
+    baseWind: 8.5,
+    gustStrength: 2.1,
+    cloudOpacity: 0.98,
+    cloudDrift: 0.62
   }
 };
 
@@ -74,6 +97,8 @@ export class GameWorld {
     this.clouds = [];
     this.birds = [];
     this.swayingTrees = [];
+    this.ambientPeople = [];
+    this.cloudMaterial = null;
     this.windRibbonNodes = [];
     this.currentPreset = WEATHER_PRESETS.tarde;
     this.mapId = 'laje';
@@ -190,6 +215,7 @@ export class GameWorld {
 
     this.scene.fog.color.setHex(p.fogColor);
     this.scene.fog.density = p.fogDensity;
+    if (this.cloudMaterial) this.cloudMaterial.opacity = p.cloudOpacity ?? 0.9;
   }
 
   getTerrainHeight(x, z) {
@@ -499,6 +525,17 @@ export class GameWorld {
     return { spawn: this.playerSpawn.clone(), rivalSpots: this.rivalSpots };
   }
 
+  _addAmbientWalker(parent, x, z, shirtHex, phase = 0, radius = 1.2, speed = 0.65, mapId = 'laje') {
+    const avatar = this._createPipeiroCharacter(shirtHex, 0x1e293b);
+    avatar.scale.setScalar(0.86);
+    const grouped = parent !== this.scene;
+    const baseY = grouped ? -0.16 : this.getTerrainHeight(x, z);
+    avatar.position.set(x, baseY, z);
+    if (grouped) parent.add(avatar);
+    else this.scene.add(avatar);
+    this.ambientPeople.push({ avatar, x, z, baseY, phase, radius, speed, mapId, grouped });
+  }
+
   _buildAlternativeMaps() {
     const mat = (color, roughness = 0.9) => new THREE.MeshStandardMaterial({ color, roughness });
     const groundPlane = (group, color, size = 220) => {
@@ -551,6 +588,8 @@ export class GameWorld {
         const pole=new THREE.Mesh(new THREE.CylinderGeometry(.045,.055,2.3,8),mat(0x64748b)); pole.position.set(x,1.15,z); g.add(pole);
         const canopy=new THREE.Mesh(new THREE.ConeGeometry(2.1,.7,10),mat(umbrellaColors[i])); canopy.position.set(x,2.35,z); g.add(canopy);
       }
+      this._addAmbientWalker(g, -7, 9, 0x0ea5e9, 0.4, 1.4, 0.7, 'praia');
+      this._addAmbientWalker(g, 19, -2, 0xf97316, 2.1, 1.1, 0.58, 'praia');
       this.mapGroups.praia=g; this.scene.add(g);
     }
 
@@ -568,6 +607,8 @@ export class GameWorld {
       const basin=new THREE.Mesh(new THREE.CylinderGeometry(4.1,4.4,.55,24),mat(0xb7c4c9)); basin.position.set(0,.12,-5); g.add(basin);
       const water=new THREE.Mesh(new THREE.CylinderGeometry(3.65,3.65,.08,24),mat(0x38bdf8,.25)); water.position.set(0,.43,-5); g.add(water);
       const jet=new THREE.Mesh(new THREE.CylinderGeometry(.08,.16,2.1,10),mat(0x93c5fd)); jet.position.set(0,1.5,-5); g.add(jet);
+      this._addAmbientWalker(g, -11, 14, 0x22c55e, 1.0, 1.8, 0.62, 'parque');
+      this._addAmbientWalker(g, 13, -15, 0xe879f9, 3.2, 1.5, 0.72, 'parque');
       this.mapGroups.parque=g; this.scene.add(g);
     }
 
@@ -586,6 +627,8 @@ export class GameWorld {
       }
       for(let i=0;i<4;i++){const stand=new THREE.Mesh(new THREE.BoxGeometry(30,.7,2.2),mat(i%2?0x2563eb:0xef4444));stand.position.set(0,.35,-38-i*2.5);g.add(stand);}
       for(const x of [-48,48]){const pole=new THREE.Mesh(new THREE.CylinderGeometry(.14,.2,12,8),mat(0x475569));pole.position.set(x,6,-20);g.add(pole);const lamp=new THREE.Mesh(new THREE.BoxGeometry(2,.35,.7),mat(0xfef3c7));lamp.position.set(x,12,-20);g.add(lamp);}
+      this._addAmbientWalker(g, -42, 11, 0x38bdf8, 0.8, 1.7, 0.68, 'campinho');
+      this._addAmbientWalker(g, 43, 9, 0xfacc15, 2.6, 1.4, 0.56, 'campinho');
       this.mapGroups.campinho=g; this.scene.add(g);
     }
 
@@ -603,6 +646,8 @@ export class GameWorld {
         const roof=new THREE.Mesh(new THREE.ConeGeometry(6,2.5,4),mat(0x7f1d1d));roof.position.set(x,h+1,z);roof.rotation.y=Math.PI/4;g.add(roof);
       }
       for(let i=0;i<18;i++){const x=(i%6-2.5)*15,z=(Math.floor(i/6)-1)*26;addTree(g,x,z,.7+(i%3)*.1,0x3d7046);}
+      this._addAmbientWalker(g, -18, 14, 0xf97316, 1.4, 1.6, 0.58, 'morro');
+      this._addAmbientWalker(g, 24, -12, 0x60a5fa, 3.8, 1.3, 0.64, 'morro');
       this.mapGroups.morro=g; this.scene.add(g);
     }
     for (const group of Object.values(this.mapGroups)) group.visible = false;
@@ -801,6 +846,15 @@ export class GameWorld {
       this.scene.add(tree);
       this.swayingTrees.push({ crown, phase: rand() * 10 });
     }
+
+    // Moradores circulam pela rua e deixam a vizinhança menos estática.
+    const streetPeople = [
+      [-17, 4, 0x22c55e], [19, 6, 0xf97316], [-40, -25, 0x38bdf8],
+      [39, -31, 0xe879f9], [2, -45, 0xfacc15]
+    ];
+    streetPeople.forEach(([x, z, shirt], index) => {
+      this._addAmbientWalker(this.scene, x, z, shirt, index * 1.17, 1.15 + (index % 2) * 0.45, 0.48 + (index % 3) * 0.09, 'laje');
+    });
   }
 
   _buildCloudsAndBirds() {
@@ -812,6 +866,7 @@ export class GameWorld {
       transparent: true,
       opacity: 0.9
     });
+    this.cloudMaterial = cloudMat;
     const puffGeo = new THREE.DodecahedronGeometry(1, 2);
 
     for (let i = 0; i < 18; i++) {
@@ -865,10 +920,11 @@ export class GameWorld {
       this.playerAvatar.visible = showPlayerAvatar;
     }
 
-    // Drift clouds with wind
+    // Drift clouds with wind; overcast weather moves them more slowly.
+    const cloudDrift = this.currentPreset.cloudDrift ?? 1;
     for (const c of this.clouds) {
-      c.group.position.x += windVec.x * c.speedFactor * dt;
-      c.group.position.z += windVec.z * c.speedFactor * dt;
+      c.group.position.x += windVec.x * c.speedFactor * cloudDrift * dt;
+      c.group.position.z += windVec.z * c.speedFactor * cloudDrift * dt;
       if (c.group.position.z < -390) c.group.position.z = 90;
       if (c.group.position.z > 100) c.group.position.z = -380;
       if (c.group.position.x < -250) c.group.position.x = 250;
@@ -891,6 +947,23 @@ export class GameWorld {
     for (const t of this.swayingTrees) {
       t.crown.rotation.z = Math.sin(time * 2.2 + t.phase) * 0.03 * (windMag / 9);
       t.crown.rotation.x = -0.025 * (windMag / 9);
+    }
+
+    // Animate the neighborhood residents with a restrained walking cycle.
+    for (const person of this.ambientPeople) {
+      const phase = time * person.speed + person.phase;
+      const stride = Math.sin(phase * 3.2);
+      person.avatar.position.x = person.x + Math.sin(phase) * person.radius;
+      person.avatar.position.y = person.baseY + Math.abs(stride) * 0.025;
+      person.avatar.position.z = person.z + Math.cos(phase * 0.72) * person.radius * 0.34;
+      person.avatar.rotation.y = Math.atan2(Math.cos(phase) * person.radius, -Math.sin(phase * 0.72) * person.radius * 0.34);
+      const parts = person.avatar.userData.walkParts;
+      if (parts) {
+        parts.leftLeg.rotation.x = stride * 0.3;
+        parts.rightLeg.rotation.x = -stride * 0.3;
+        parts.leftArm.rotation.x = 0.85 - stride * 0.08;
+        parts.rightArm.rotation.x = 1.05 + stride * 0.08;
+      }
     }
 
     // Update rooftop wind streamer ("biruta de fitinha")
