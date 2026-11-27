@@ -1,9 +1,35 @@
 import * as THREE from 'three';
 
+export function createOpponentMemory() {
+  return { left: 0, right: 0, pull: 0, release: 0, confidence: 0, preferredSide: 1 };
+}
+
+export function observeOpponentMemory(memory, playerKite, dt = 0.016) {
+  const decay = Math.exp(-Math.max(0, dt) * 0.035);
+  memory.left *= decay;
+  memory.right *= decay;
+  memory.pull *= decay;
+  memory.release *= decay;
+  if (!playerKite?.active) return memory;
+
+  const angle = playerKite.noseAngle || 0;
+  if (angle < -0.14) memory.left += dt * Math.min(1.8, Math.abs(angle));
+  else if (angle > 0.14) memory.right += dt * Math.min(1.8, Math.abs(angle));
+  if (playerKite.reelSpeed < -0.8) memory.pull += dt;
+  if (playerKite.reelSpeed > 1.8) memory.release += dt;
+
+  const turnTotal = memory.left + memory.right;
+  memory.confidence = THREE.MathUtils.clamp(turnTotal * 0.28 + Math.abs(memory.pull - memory.release) * 0.12, 0, 1);
+  if (turnTotal > 0.15) memory.preferredSide = memory.left > memory.right ? -1 : 1;
+  return memory;
+}
+
 export class RivalAIController {
   constructor(kiteEntity, personality = 'balanced') {
     this.kite = kiteEntity;
     this.personality = personality; // 'hunter' | 'slasher' | 'trickster' | 'balanced'
+    this.memory = createOpponentMemory();
+    this.focusesPlayer = false;
     this.targetPoint = new THREE.Vector3(
       (Math.random() - 0.5) * 44,
       32 + Math.random() * 24,
@@ -25,6 +51,7 @@ export class RivalAIController {
     dt = 0.016
   }) {
     const skill = THREE.MathUtils.clamp((difficulty - 0.68) / 1.47, 0, 1);
+    observeOpponentMemory(this.memory, playerKite, dt);
     if (!this.kite.active) {
       this.respawnTimer -= dt;
       if (this.respawnTimer <= 0) this.kite.spawnInSky(true);
@@ -59,12 +86,14 @@ export class RivalAIController {
           this.targetPoint.copy(chasedDrift.position);
         } else {
           const playerActive = playerKite && playerKite.active;
-          const engagePlayerChance = Math.min(
-            0.98,
-            (this.personality === 'hunter' ? 0.64 : 0.46) * difficulty
-          );
+          const personalityAggression = this.personality === 'hunter' ? 0.68
+            : this.personality === 'slasher' ? 0.58
+            : this.personality === 'trickster' ? 0.50 : 0.42;
+          const memoryBonus = this.memory.confidence * (this.personality === 'hunter' ? 0.16 : 0.10);
+          const engagePlayerChance = Math.min(0.98, (personalityAggression + memoryBonus) * difficulty);
 
           if (playerActive && Math.random() < engagePlayerChance) {
+            this.focusesPlayer = true;
             const idx = Math.floor(playerKite.stringNodes.length * (0.68 + Math.random() * 0.25));
             const stringPt = playerKite.stringNodes[idx] || playerKite.position;
             const leadTime = 0.18 + skill * 0.42;
@@ -78,6 +107,7 @@ export class RivalAIController {
                 (Math.random() - 0.5) * spread * 0.68
               ));
           } else if (allRivals.length > 1 && Math.random() < 0.38) {
+            this.focusesPlayer = false;
             const others = allRivals.filter((r) => r.kite !== this.kite && r.kite.active);
             if (others.length > 0) {
               const pick = others[Math.floor(Math.random() * others.length)].kite;
@@ -86,6 +116,7 @@ export class RivalAIController {
               );
             }
           } else {
+            this.focusesPlayer = false;
             this.targetPoint.set(
               (Math.random() - 0.5) * 52,
               28 + Math.random() * 30,
@@ -95,6 +126,13 @@ export class RivalAIController {
         }
       }
 
+      if (this.focusesPlayer && playerKite?.active) {
+        // Each personality learns which side the player tends to favor and
+        // places its next approach slightly toward the less expected angle.
+        const counter = this.memory.preferredSide * this.memory.confidence;
+        this.targetPoint.x += counter * (this.personality === 'trickster' ? 4.2 : 2.4);
+        if (this.personality === 'slasher') this.targetPoint.y += this.memory.pull * 0.18;
+      }
       this.targetPoint.y = THREE.MathUtils.clamp(this.targetPoint.y, 19, 46);
       this.targetPoint.z = THREE.MathUtils.clamp(this.targetPoint.z, -76, -22);
     }
@@ -118,8 +156,9 @@ export class RivalAIController {
     while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
 
     // Hard rivals correct their nose more precisely and more quickly.
+    const memoryRead = this.focusesPlayer ? this.memory.confidence * this.memory.preferredSide * 0.055 : 0;
     const steerGain = 1.65 + skill * 0.92;
-    const steer = THREE.MathUtils.clamp(angleDiff * steerGain, -1, 1);
+    const steer = THREE.MathUtils.clamp((angleDiff + memoryRead) * steerGain, -1, 1);
 
     const desiredRadius = THREE.MathUtils.clamp(
       this.kite.anchorPos.distanceTo(this.targetPoint),
