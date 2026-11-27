@@ -1194,8 +1194,8 @@ class Pipa3DGame {
           const powerB = this._computeCutAttackPower(kB, uB, uA, crossingQuality, relativeSpeed);
 
           // Correct angle, entry height and timing decide who loses line integrity.
-          kB.lineIntegrity -= powerA * dt * 0.92;
-          kA.lineIntegrity -= powerB * dt * 0.92;
+          kB.lineIntegrity -= powerA * dt * 0.92 / (kB.lineType.durability || 1);
+          kA.lineIntegrity -= powerB * dt * 0.92 / (kA.lineType.durability || 1);
 
           if (involvesPlayer) {
             playerReloIntensity = 1.0;
@@ -1212,8 +1212,8 @@ class Pipa3DGame {
           }
         } else {
           // Lines slowly recover integrity when not rubbing
-          kA.lineIntegrity = Math.min(1.0, kA.lineIntegrity + dt * 0.45);
-          kB.lineIntegrity = Math.min(1.0, kB.lineIntegrity + dt * 0.45);
+          kA.lineIntegrity = Math.min(1.0, kA.lineIntegrity + dt * (kA.lineType.recovery || 0.45));
+          kB.lineIntegrity = Math.min(1.0, kB.lineIntegrity + dt * (kB.lineType.recovery || 0.45));
         }
       }
     }
@@ -1262,6 +1262,7 @@ class Pipa3DGame {
       largadaActive: attacker.largadaBoost > 0,
       largadaQuality: attacker.largadaQuality,
       linePower: attacker.lineType.cutPower * attacker.visual.spec.powerMult,
+      wrapQuality: attacker.inRelo ? 0.72 : 0.08,
       ownU: uSelf,
       targetU: uEnemy
     });
