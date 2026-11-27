@@ -546,7 +546,10 @@ export class GameWorld {
     const detailMat = material(look.detailColor || 0xd1d5db, 0.5, 0.18);
     const metalMat = material(look.metalColor || 0xd1d5db, 0.28, 0.72);
     const whiteMat = material(0xf8fafc, 0.55);
+    const irisMat = material(0x5b3823, 0.45);
+    const mouthMat = material(0x592f2c, 0.9);
     const inkMat = material(look.tattooColor || 0x34303a, 0.95);
+    const sphereGeo = new THREE.SphereGeometry(1, 20, 16);
 
     const mesh = (geometry, mat, parent = g, position = [0, 0, 0]) => {
       const item = new THREE.Mesh(geometry, mat);
@@ -556,191 +559,279 @@ export class GameWorld {
       parent.add(item);
       return item;
     };
+    const ellipsoid = (parent, mat, position, scale) => {
+      const item = mesh(sphereGeo, mat, parent, position);
+      item.scale.set(scale[0], scale[1], scale[2]);
+      return item;
+    };
+    const capsule = (parent, mat, radius, length, position) => {
+      return mesh(new THREE.CapsuleGeometry(radius, length, 5, 12), mat, parent, position);
+    };
     const box = (w, h, d, mat, parent, pos, rot = null) => {
       const item = mesh(new THREE.BoxGeometry(w, h, d), mat, parent, pos);
       if (rot) item.rotation.set(rot[0], rot[1], rot[2]);
       return item;
     };
+    const tube = (parent, mat, points, radius = 0.005) => {
+      const curve = new THREE.CatmullRomCurve3(points.map((point) =>
+        new THREE.Vector3(point[0], point[1], point[2])
+      ));
+      return mesh(new THREE.TubeGeometry(curve, 12, radius, 6, false), mat, parent);
+    };
 
-    const bodyWidth = look.bodyType === 'stocky' ? 1.12 : look.bodyType === 'slim' ? 0.9 : 1;
-    const body = mesh(
-      new THREE.BoxGeometry(0.51 * bodyWidth, look.shirtStyle === 'oversized' ? 0.66 : 0.6, 0.3),
-      shirtMat,
-      g,
-      [0, 1.12, 0]
-    );
-    body.scale.y = 1;
-    const hem = box(0.515 * bodyWidth, 0.035, 0.305, darkMat, g, [0, 0.79, 0]);
-    hem.material = shirtMat;
+    const bodyWidth = look.bodyType === 'stocky' ? 1.08 : look.bodyType === 'slim' ? 0.92 : 1;
+    const oversized = look.shirtStyle === 'oversized';
+    const isShorts = look.pantsStyle === 'cargoShorts' || look.pantsStyle === 'denimShorts';
 
-    // Collar, shoulder seams and a small original kite mark on the chest.
-    const collar = mesh(new THREE.TorusGeometry(0.088, 0.012, 5, 18), darkMat, g, [0, 1.425, -0.012]);
-    collar.rotation.x = Math.PI / 2;
-    const chestMark = mesh(new THREE.OctahedronGeometry(0.065, 0), whiteMat, g, [0.095, 1.2, -0.157]);
-    chestMark.scale.set(0.75, 1.15, 0.28);
-    const chestMarkAccent = box(0.014, 0.085, 0.012, material(0xfacc15, 0.65), g, [0.095, 1.2, -0.176], [0, 0, 0.3]);
-    if (look.shirtStyle === 'sports') {
-      box(0.035, 0.48, 0.012, detailMat, g, [-0.17, 1.12, -0.158]);
-      box(0.035, 0.48, 0.012, detailMat, g, [0.17, 1.12, -0.158]);
-    } else if (look.shirtStyle === 'polo') {
-      box(0.11, 0.09, 0.018, detailMat, g, [0, 1.39, -0.162]);
-    } else if (look.shirtStyle === 'hoodie') {
-      const hood = mesh(new THREE.SphereGeometry(0.16, 10, 8), shirtMat, g, [0, 1.43, 0.09]);
-      hood.scale.set(0.9, 0.86, 0.62);
-      box(0.018, 0.25, 0.015, detailMat, g, [0, 1.13, -0.164]);
-    }
+    // Anatomical torso: a smooth lathed silhouette, wider at the chest and
+    // shoulders, gently narrowing at the waist instead of a rectangular box.
+    const torsoProfile = [
+      new THREE.Vector2(0.105, -0.35),
+      new THREE.Vector2(0.155, -0.34),
+      new THREE.Vector2(0.18, -0.27),
+      new THREE.Vector2(0.175, -0.16),
+      new THREE.Vector2(0.18, -0.03),
+      new THREE.Vector2(0.205, 0.08),
+      new THREE.Vector2(0.245, 0.19),
+      new THREE.Vector2(0.238, 0.265),
+      new THREE.Vector2(0.19, 0.325),
+      new THREE.Vector2(0.095, 0.35),
+      new THREE.Vector2(0, 0.35)
+    ];
+    const torso = mesh(new THREE.LatheGeometry(torsoProfile, 32), shirtMat, g, [0, 1.12, 0]);
+    torso.scale.set(bodyWidth * (oversized ? 1.055 : 1), oversized ? 1.04 : 0.98, 0.76);
 
-    // Neck and shaped head.
-    mesh(new THREE.CylinderGeometry(0.075, 0.085, 0.17, 10), skinMat, g, [0, 1.48, 0]);
-    const head = mesh(new THREE.SphereGeometry(0.16, 16, 12), skinMat, g, [0, 1.65, 0]);
-    head.scale.set(0.98, look.ageGroup === 'older' ? 1.12 : 1.08, 0.94);
-
-    // Ears and face details face the -Z side of the character.
+    // A soft hem and shoulder contours blend the torso into the sleeves.
+    const hem = mesh(new THREE.TorusGeometry(0.164 * bodyWidth, 0.014, 7, 28), shirtMat, g, [0, 0.79, 0]);
+    hem.rotation.x = Math.PI / 2;
+    hem.scale.z = 0.76;
     for (const side of [-1, 1]) {
-      const ear = mesh(new THREE.SphereGeometry(0.035, 8, 7), skinMat, g, [side * 0.15, 1.65, -0.005]);
-      ear.scale.set(0.65, 1.05, 0.7);
-      mesh(new THREE.SphereGeometry(0.018, 7, 6), darkMat, g, [side * 0.064, 1.665, -0.145]);
-      box(0.065, 0.012, 0.012, hairMat, g, [side * 0.064, 1.705, -0.151], [0, 0, side * -0.08]);
+      const shoulder = ellipsoid(g, shirtMat, [side * 0.225 * bodyWidth, 1.315, 0], [0.105, 0.105, 0.105]);
+      shoulder.rotation.z = side * -0.1;
     }
-    mesh(new THREE.SphereGeometry(0.024, 8, 7), skinMat, g, [0, 1.61, -0.153]);
-    box(0.052, 0.009, 0.012, darkMat, g, [0, 1.575, -0.151]);
+
+    // Pelvis and waist follow the body instead of forming a square block.
+    const pelvis = ellipsoid(g, isShorts ? shortsMat : pantsMat, [0, 0.755, 0], [0.225 * bodyWidth, 0.135, 0.165]);
+    pelvis.rotation.z = 0;
+    const waistBand = mesh(new THREE.TorusGeometry(0.19 * bodyWidth, 0.012, 6, 28), detailMat, g, [0, 0.855, 0]);
+    waistBand.rotation.x = Math.PI / 2;
+    waistBand.scale.z = 0.78;
+
+    // Neck, jaw and softly sculpted head.
+    capsule(g, skinMat, 0.064, 0.115, [0, 1.49, 0]);
+    const head = ellipsoid(g, skinMat, [0, 1.665, 0], [0.151, look.ageGroup === 'older' ? 0.194 : 0.184, 0.137]);
+    head.rotation.x = -0.025;
+    ellipsoid(g, skinMat, [0, 1.555, -0.027], [0.119, 0.101, 0.12]);
+    ellipsoid(g, skinMat, [0, 1.527, -0.072], [0.075, 0.052, 0.082]);
+
+    // Ears, eyes, nose, lips and brows are built into the face.
+    for (const side of [-1, 1]) {
+      ellipsoid(g, skinMat, [side * 0.149, 1.66, -0.002], [0.034, 0.052, 0.031]);
+      ellipsoid(g, skinMat, [side * 0.151, 1.658, -0.025], [0.014, 0.025, 0.012]);
+      ellipsoid(g, darkMat, [side * 0.057, 1.688, -0.126], [0.027, 0.018, 0.012]);
+      ellipsoid(g, whiteMat, [side * 0.057, 1.686, -0.137], [0.018, 0.0115, 0.009]);
+      ellipsoid(g, irisMat, [side * 0.057, 1.686, -0.145], [0.0085, 0.009, 0.0045]);
+      ellipsoid(g, darkMat, [side * 0.057, 1.686, -0.149], [0.0048, 0.006, 0.003]);
+      ellipsoid(g, whiteMat, [side * 0.06 - 0.003, 1.69, -0.152], [0.0028, 0.0028, 0.0015]);
+      tube(g, hairMat, [
+        [side * 0.091, 1.716, -0.137],
+        [side * 0.058, 1.724, -0.145],
+        [side * 0.025, 1.716, -0.14]
+      ], 0.006);
+    }
+    ellipsoid(g, skinMat, [0, 1.657, -0.151], [0.022, 0.046, 0.027]);
+    ellipsoid(g, skinMat, [0, 1.625, -0.17], [0.032, 0.022, 0.026]);
+    ellipsoid(g, skinMat, [-0.023, 1.624, -0.155], [0.017, 0.013, 0.015]);
+    ellipsoid(g, skinMat, [0.023, 1.624, -0.155], [0.017, 0.013, 0.015]);
+    tube(g, mouthMat, [
+      [-0.031, 1.572, -0.172],
+      [-0.015, 1.568, -0.178],
+      [0, 1.567, -0.18],
+      [0.015, 1.568, -0.178],
+      [0.031, 1.572, -0.172]
+    ], 0.0045);
+
     if (look.ageGroup === 'older') {
+      const wrinkleMat = material(0x916b58, 0.95);
       for (const side of [-1, 1]) {
-        box(0.043, 0.006, 0.008, inkMat, g, [side * 0.077, 1.625, -0.148]);
+        tube(g, wrinkleMat, [
+          [side * 0.08, 1.646, -0.139],
+          [side * 0.11, 1.641, -0.126],
+          [side * 0.125, 1.635, -0.116]
+        ], 0.0025);
       }
     }
 
-    // Hair cuts are deliberately varied rather than recoloring one repeated mesh.
+    // Hair cap follows the skull; curls and fades are individually sculpted.
     if (look.hairStyle === 'afro') {
-      const afro = mesh(new THREE.SphereGeometry(0.205, 13, 10), hairMat, g, [0, 1.76, 0.005]);
-      afro.scale.set(1.04, 0.88, 1.02);
+      ellipsoid(g, hairMat, [0, 1.785, 0.006], [0.194, 0.156, 0.17]);
+      const curls = [
+        [-0.15,1.79,-0.035],[-0.11,1.88,-0.025],[-0.055,1.91,-0.015],
+        [0.01,1.925,-0.012],[0.08,1.9,0],[0.145,1.84,0.015],
+        [-0.13,1.84,0.09],[-0.065,1.9,0.11],[0.035,1.91,0.12],[0.12,1.86,0.105]
+      ];
+      curls.forEach((point) => ellipsoid(g, hairMat, point, [0.04, 0.041, 0.04]));
     } else if (look.hairStyle === 'cap') {
-      mesh(new THREE.CylinderGeometry(0.155, 0.16, 0.105, 12), hairMat, g, [0, 1.775, 0]);
-      box(0.24, 0.025, 0.16, hairMat, g, [0, 1.735, -0.13]);
+      ellipsoid(g, hairMat, [0, 1.765, 0.006], [0.158, 0.095, 0.145]);
+      const capCrown = mesh(new THREE.SphereGeometry(0.16, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2), hairMat, g, [0, 1.77, 0.005]);
+      capCrown.scale.set(1, 0.88, 0.94);
+      ellipsoid(g, hairMat, [0, 1.755, -0.142], [0.13, 0.018, 0.09]);
     } else if (look.hairStyle !== 'bald') {
-      const capHeight = look.hairStyle === 'buzz' ? 0.38 : 0.56;
-      const hairCap = mesh(
-        new THREE.SphereGeometry(0.17, 14, 9, 0, Math.PI * 2, 0, Math.PI * capHeight),
-        hairMat,
-        g,
-        [0, 1.755, 0]
-      );
-      hairCap.scale.set(1.04, 1, 1.02);
+      ellipsoid(g, hairMat, [0, 1.777, 0.01], [0.158, 0.115, 0.145]);
       if (look.hairStyle === 'curlyFade' || look.hairStyle === 'waves') {
-        const curlGeo = new THREE.SphereGeometry(0.038, 7, 6);
         const curls = look.hairStyle === 'curlyFade'
-          ? [[-0.105,1.77,-0.005],[-0.055,1.81,-0.025],[0,1.82,-0.025],[0.06,1.81,-0.018],[0.11,1.77,-0.005],[-0.08,1.82,0.05],[0.035,1.83,0.05],[0.1,1.81,0.06]]
-          : [[-0.1,1.79,0],[-0.04,1.81,-0.02],[0.04,1.81,-0.02],[0.1,1.79,0]];
-        curls.forEach((p) => mesh(curlGeo, hairMat, g, p));
+          ? [[-0.12,1.81,-0.035],[-0.075,1.86,-0.045],[-0.02,1.875,-0.045],[0.04,1.87,-0.04],[0.095,1.84,-0.025],[0.135,1.80,0.005],[-0.08,1.86,0.07],[0.0,1.89,0.075],[0.085,1.86,0.075]]
+          : [[-0.12,1.82,-0.025],[-0.06,1.85,-0.04],[0.01,1.865,-0.04],[0.08,1.85,-0.025],[0.13,1.82,0.02]];
+        curls.forEach((point) => ellipsoid(g, hairMat, point, [0.034, 0.035, 0.034]));
+      }
+      if (look.hairStyle === 'buzz') {
+        ellipsoid(g, hairMat, [0, 1.77, 0.01], [0.16, 0.08, 0.146]);
       }
       if (look.hairStyle === 'curlyFade') {
-        box(0.013, 0.075, 0.01, detailMat, g, [0.145, 1.68, -0.04], [0, 0, -0.15]);
+        // Clean low fade at both temples.
+        for (const side of [-1, 1]) {
+          ellipsoid(g, hairMat, [side * 0.132, 1.714, 0.012], [0.018, 0.047, 0.085]);
+        }
       }
     }
 
     if (look.beardStyle && look.beardStyle !== 'none') {
-      const beardMat = material(look.beardStyle === 'gray' ? 0x929292 : look.hairColor, 0.95);
-      const beard = mesh(new THREE.SphereGeometry(0.105, 10, 8), beardMat, g, [0, 1.535, -0.05]);
-      beard.scale.set(1.05, 0.58, 0.92);
+      const beardColor = look.beardStyle === 'gray' ? 0x929292 : look.hairColor;
+      const beardMat = material(beardColor, 0.95);
+      ellipsoid(g, beardMat, [0, 1.55, -0.105], [0.092, 0.071, 0.045]);
+      ellipsoid(g, beardMat, [0, 1.525, -0.08], [0.068, 0.05, 0.04]);
+      for (const side of [-1, 1]) {
+        ellipsoid(g, beardMat, [side * 0.085, 1.57, -0.075], [0.028, 0.045, 0.026]);
+      }
     }
+
     if (look.accessory === 'glasses') {
       for (const side of [-1, 1]) {
-        const lens = mesh(new THREE.TorusGeometry(0.045, 0.006, 4, 12), darkMat, g, [side * 0.058, 1.665, -0.16]);
-        lens.scale.y = 0.76;
+        const lens = mesh(new THREE.TorusGeometry(0.037, 0.0045, 5, 16), darkMat, g, [side * 0.057, 1.685, -0.143]);
+        lens.scale.y = 0.82;
       }
-      box(0.055, 0.008, 0.008, darkMat, g, [0, 1.665, -0.16]);
+      tube(g, darkMat, [[-0.02,1.685,-0.145],[0,1.688,-0.15],[0.02,1.685,-0.145]], 0.004);
     }
 
-    // Cargo shorts, jeans or track pants change the silhouette below the shirt.
-    const shorts = mesh(
-      new THREE.BoxGeometry(0.49 * bodyWidth, look.pantsStyle === 'cargoShorts' ? 0.31 : 0.19, 0.32),
-      look.pantsStyle === 'cargoShorts' || look.pantsStyle === 'denimShorts' ? shortsMat : pantsMat,
-      g,
-      [0, 0.77, 0]
-    );
-    if (look.pantsStyle === 'cargoShorts') {
+    // Clothing folds and seams follow the rounded shirt surface.
+    const seamMat = material(0x252525, 0.88);
+    tube(g, seamMat, [[-0.16,0.99,-0.139],[0,0.975,-0.151],[0.16,0.99,-0.139]], 0.0028);
+    if (look.shirtStyle === 'sports') {
       for (const side of [-1, 1]) {
-        box(0.12, 0.13, 0.018, detailMat, g, [side * 0.19, 0.76, -0.17]);
-        box(0.13, 0.07, 0.025, shortsMat, g, [side * 0.19, 0.82, -0.183]);
+        tube(g, detailMat, [[side * 0.17,1.35,-0.095],[side * 0.19,1.15,-0.13],[side * 0.17,0.96,-0.125]], 0.012);
       }
-      if (look.shortsPattern === 'urbanCamo') {
-        const camoColors = [0x3f4142, 0x66686a, 0x17191b, 0x858585];
-        camoColors.forEach((color, i) => {
-          const patch = box(0.09, 0.07, 0.012, material(color, 0.95), g,
-            [-0.17 + (i % 2) * 0.19, 0.72 + Math.floor(i / 2) * 0.11, -0.177],
-            [0, 0, (i % 2 ? -0.22 : 0.18)]);
-          patch.scale.set(1, 1, 0.4);
-        });
-      }
+    } else if (look.shirtStyle === 'polo') {
+      ellipsoid(g, detailMat, [0, 1.375, -0.16], [0.028, 0.065, 0.009]);
+      box(0.012, 0.012, 0.006, metalMat, g, [0.012, 1.36, -0.174]);
+    } else if (look.shirtStyle === 'hoodie') {
+      ellipsoid(g, shirtMat, [0, 1.43, 0.075], [0.12, 0.11, 0.08]);
+      tube(g, detailMat, [[-0.035,1.37,-0.158],[-0.03,1.18,-0.17],[-0.028,1.08,-0.16]], 0.0035);
+      tube(g, detailMat, [[0.035,1.37,-0.158],[0.03,1.18,-0.17],[0.028,1.08,-0.16]], 0.0035);
     }
 
-    // Articulated hips, legs, socks and individual sneakers.
-    const legGeo = new THREE.CylinderGeometry(0.075, 0.064, 0.59, 9);
-    const sockColor = look.sockColor || 0x1f2937;
-    const sockMat = material(sockColor, 0.88);
+    // Cargo shorts and jeans are rounded around each thigh, never a cuboid.
     const legs = [];
+    const arms = [];
+    const calves = [];
+    const sockMat = material(look.sockColor || 0x1f2937, 0.88);
+    const pantMaterial = isShorts ? skinMat : pantsMat;
     for (const side of [-1, 1]) {
       const leg = new THREE.Group();
-      leg.position.set(side * 0.135, 0.69, 0);
+      leg.position.set(side * 0.135, 0.735, 0);
       g.add(leg);
-      mesh(legGeo, look.pantsStyle === 'cargoShorts' || look.pantsStyle === 'denimShorts' ? skinMat : pantsMat, leg, [0, -0.28, 0]);
-      if (look.pantsStyle === 'trackPants') {
-        box(0.018, 0.48, 0.012, detailMat, leg, [side * 0.071, -0.28, -0.062]);
+
+      capsule(leg, pantMaterial, 0.069, 0.22, [0, -0.145, 0]);
+      ellipsoid(leg, pantMaterial, [0, -0.305, 0], [0.063, 0.067, 0.064]);
+
+      if (isShorts) {
+        const shortLeg = capsule(leg, shortsMat, 0.088, 0.12, [side * 0.004, -0.105, 0]);
+        shortLeg.scale.set(1.02, 1.0, 1.05);
+        if (look.pantsStyle === 'cargoShorts') {
+          ellipsoid(leg, detailMat, [side * 0.075, -0.115, -0.052], [0.018, 0.064, 0.014]);
+          ellipsoid(leg, shortsMat, [side * 0.075, -0.115, -0.065], [0.012, 0.044, 0.008]);
+        }
+        if (look.shortsPattern === 'urbanCamo') {
+          const patchColors = [0x3f4142, 0x66686a, 0x17191b, 0x858585];
+          patchColors.forEach((color, index) => {
+            ellipsoid(leg, material(color, 0.95),
+              [side * (0.02 + (index % 2) * 0.032), -0.08 - Math.floor(index / 2) * 0.065, -0.083],
+              [0.034, 0.027, 0.006]);
+          });
+        }
+      } else if (look.pantsStyle === 'trackPants') {
+        tube(leg, detailMat, [[side * 0.045,-0.02,-0.052],[side * 0.045,-0.16,-0.058],[side * 0.045,-0.28,-0.05]], 0.007);
       }
-      const sock = mesh(new THREE.CylinderGeometry(0.069, 0.068, 0.22, 8), sockMat, leg, [0, -0.46, 0]);
-      if (look.sockStripe) box(0.13, 0.018, 0.012, detailMat, leg, [0, -0.39, -0.067]);
-      const sole = box(0.235, 0.07, 0.35, soleMat, leg, [0, -0.62, -0.035]);
-      const sneaker = box(0.22, 0.13, 0.32, shoeMat, leg, [0, -0.55, -0.035]);
-      box(0.16, 0.018, 0.02, detailMat, leg, [0, -0.54, -0.19]);
+
+      const calf = new THREE.Group();
+      calf.position.set(0, -0.31, 0);
+      leg.add(calf);
+      capsule(calf, pantMaterial, 0.052, 0.18, [0, -0.15, 0]);
+      ellipsoid(calf, pantMaterial, [0, -0.275, 0], [0.049, 0.048, 0.052]);
+      capsule(calf, sockMat, 0.056, 0.08, [0, -0.247, 0]);
+      if (look.sockStripe) {
+        tube(calf, detailMat, [[-0.045,-0.23,-0.031],[0,-0.23,-0.055],[0.045,-0.23,-0.031]], 0.004);
+      }
+
+      // Soft sneaker upper, toe cap, midsole and curved outsole.
+      ellipsoid(calf, soleMat, [0, -0.365, -0.055], [0.115, 0.035, 0.19]);
+      ellipsoid(calf, shoeMat, [0, -0.333, -0.057], [0.108, 0.069, 0.176]);
+      ellipsoid(calf, detailMat, [0, -0.325, -0.17], [0.074, 0.043, 0.057]);
+      tube(calf, whiteMat, [[-0.062,-0.298,-0.095],[-0.032,-0.29,-0.12],[0,-0.292,-0.125],[0.032,-0.29,-0.12],[0.062,-0.298,-0.095]], 0.004);
+      for (let lace = 0; lace < 3; lace++) {
+        tube(calf, soleMat, [
+          [-0.034,-0.277,-0.12 + lace * 0.026],
+          [0,-0.27,-0.11 + lace * 0.026],
+          [0.034,-0.277,-0.12 + lace * 0.026]
+        ], 0.0025);
+      }
+
+      calves.push(calf);
       legs.push(leg);
     }
 
-    // Shoulder-mounted articulated arms. NPCs walk with relaxed arms; the main
-    // pipeiro keeps a light ready-to-launch posture.
-    const armGeo = new THREE.CylinderGeometry(0.052, 0.046, 0.28, 8);
-    const forearmGeo = new THREE.CylinderGeometry(0.045, 0.04, 0.27, 8);
-    const arms = [];
+    // Articulated shoulder, upper arm, elbow, forearm and hand.
     for (const side of [-1, 1]) {
       const arm = new THREE.Group();
-      arm.position.set(side * 0.3 * bodyWidth, 1.34, 0);
+      arm.position.set(side * 0.252 * bodyWidth, 1.325, 0);
       g.add(arm);
-      mesh(new THREE.SphereGeometry(0.074, 8, 7), shirtMat, arm, [0, -0.025, 0]);
-      mesh(armGeo, shirtMat, arm, [0, -0.15, 0]);
-      mesh(forearmGeo, skinMat, arm, [0, -0.39, -0.006]);
-      mesh(new THREE.SphereGeometry(0.052, 8, 7), skinMat, arm, [0, -0.545, -0.012]);
+      ellipsoid(arm, shirtMat, [0, -0.045, 0], [0.085, 0.105, 0.095]);
+      capsule(arm, shirtMat, 0.071, 0.16, [0, -0.16, 0]);
+      ellipsoid(arm, skinMat, [0, -0.285, 0], [0.052, 0.057, 0.052]);
+      capsule(arm, skinMat, 0.046, 0.21, [0, -0.43, -0.006]);
+      ellipsoid(arm, skinMat, [0, -0.56, -0.018], [0.048, 0.064, 0.038]);
+      ellipsoid(arm, skinMat, [side * 0.041, -0.545, -0.035], [0.026, 0.048, 0.027]);
+
       if (look.tattoo && side === -1) {
-        box(0.07, 0.014, 0.008, inkMat, arm, [0.02, -0.37, -0.045], [0, 0, -0.18]);
-        box(0.064, 0.012, 0.008, inkMat, arm, [-0.018, -0.42, -0.045], [0, 0, 0.28]);
-        box(0.052, 0.012, 0.008, inkMat, arm, [0.018, -0.46, -0.044], [0, 0, -0.1]);
+        tube(arm, inkMat, [[-0.032,-0.34,-0.043],[0.018,-0.38,-0.048],[-0.025,-0.425,-0.046]], 0.005);
+        tube(arm, inkMat, [[0.03,-0.42,-0.04],[-0.012,-0.47,-0.046],[0.02,-0.51,-0.04]], 0.004);
       }
       arms.push(arm);
     }
 
-    // Player signature accessories: silver chain/cross, ear studs and wrist watch.
+    // Signature chain, pendant, earrings and watch sit on the body's surface.
     if (look.accessory === 'chainCross' || look.accessory === 'chain' || options.player) {
-      const chain = mesh(new THREE.TorusGeometry(0.12, 0.009, 4, 24), metalMat, g, [0, 1.405, -0.105]);
+      const chain = mesh(new THREE.TorusGeometry(0.12, 0.007, 5, 28), metalMat, g, [0, 1.415, -0.11]);
       chain.rotation.x = Math.PI / 2;
+      chain.scale.set(1, 0.78, 1);
       if (look.accessory === 'chainCross' || options.player) {
-        box(0.025, 0.105, 0.018, metalMat, g, [0, 1.27, -0.173]);
-        box(0.075, 0.023, 0.018, metalMat, g, [0, 1.292, -0.173]);
+        box(0.018, 0.09, 0.012, metalMat, g, [0, 1.292, -0.166]);
+        box(0.058, 0.016, 0.012, metalMat, g, [0, 1.315, -0.166]);
       }
     }
     if (look.earrings) {
       for (const side of [-1, 1]) {
-        mesh(new THREE.SphereGeometry(0.018, 8, 7), metalMat, g, [side * 0.167, 1.63, -0.026]);
+        ellipsoid(g, metalMat, [side * 0.17, 1.63, -0.018], [0.012, 0.016, 0.01]);
       }
     }
     if (look.watch) {
-      const watch = mesh(new THREE.TorusGeometry(0.052, 0.012, 4, 12), metalMat, arms[1], [0, -0.5, -0.01]);
-      watch.scale.set(0.95, 0.72, 1);
+      const watchArm = arms[1];
+      const watch = mesh(new THREE.TorusGeometry(0.045, 0.01, 5, 14), metalMat, watchArm, [0, -0.51, -0.008]);
+      watch.scale.set(0.9, 0.75, 1);
+      ellipsoid(watchArm, darkMat, [0, -0.51, -0.012], [0.027, 0.017, 0.012]);
     }
     if (look.accessory === 'shoulderBag') {
-      box(0.035, 0.56, 0.035, darkMat, g, [-0.19, 1.09, -0.16], [0, 0, -0.42]);
-      box(0.19, 0.2, 0.08, darkMat, g, [0.16, 0.86, -0.17]);
-    }
-    if (look.accessory === 'cap' && look.hairStyle !== 'cap') {
-      mesh(new THREE.CylinderGeometry(0.15, 0.16, 0.095, 12), hairMat, g, [0, 1.78, 0]);
-      box(0.24, 0.022, 0.16, hairMat, g, [0, 1.74, -0.13]);
+      tube(g, darkMat, [[-0.19,1.4,-0.12],[-0.16,1.15,-0.18],[-0.12,0.9,-0.14]], 0.017);
+      ellipsoid(g, darkMat, [0.15, 0.91, -0.145], [0.105, 0.13, 0.055]);
     }
 
     const height = look.heightScale || 1;
@@ -749,6 +840,8 @@ export class GameWorld {
     g.userData.walkParts = {
       leftLeg: legs[0],
       rightLeg: legs[1],
+      leftCalf: calves[0],
+      rightCalf: calves[1],
       leftArm: arms[0],
       rightArm: arms[1],
       armBaseLeft: pose === 'street' ? 0.02 : pose === 'player' ? 0.42 : 0.82,
@@ -1351,6 +1444,8 @@ export class GameWorld {
       if (parts) {
         parts.leftLeg.rotation.x = stride * 0.3;
         parts.rightLeg.rotation.x = -stride * 0.3;
+        if (parts.leftCalf) parts.leftCalf.rotation.x = Math.max(0, -stride) * 0.34;
+        if (parts.rightCalf) parts.rightCalf.rotation.x = Math.max(0, stride) * 0.34;
         parts.leftArm.rotation.x = (parts.armBaseLeft ?? 0) - stride * 0.15;
         parts.rightArm.rotation.x = (parts.armBaseRight ?? 0) + stride * 0.15;
       }
