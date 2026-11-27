@@ -630,6 +630,7 @@ class Pipa3DGame {
     renderPatterns();
 
     const linesBox = document.getElementById('opt-lines');
+    const lineDesc = document.getElementById('line-desc-text');
     const renderLines = () => {
       linesBox.innerHTML = '';
       Object.values(LINE_TYPES).forEach((lt) => {
@@ -643,6 +644,9 @@ class Pipa3DGame {
         });
         linesBox.appendChild(btn);
       });
+      const selected = LINE_TYPES[this.playerConfig.lineTypeId] || LINE_TYPES.branca_pura;
+      const dischargeNote = selected.dischargeSafe ? ' • PROTEGIDA AO DESCARREGAR' : '';
+      lineDesc.textContent = `${selected.desc} • ATAQUE ${Math.round(selected.cutPower * 100)} • HP ${Math.round(selected.durability * 100)} • RECUPERAÇÃO ${Math.round(selected.recovery * 100)}${dischargeNote}`;
     };
     renderLines();
 
