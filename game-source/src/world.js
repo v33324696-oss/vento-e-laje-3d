@@ -4,7 +4,8 @@ import {
   createConcreteTextures,
   createCorrugatedRoofTexture
 } from './textures.js';
-import { createNpcAppearance, PLAYER_PIPEIRO_APPEARANCE } from './characters.js';
+import { createNpcAppearance, PLAYER_PIPEIRO_APPEARANCE, PLAYER_ARA_CHARACTER, createNpcAraCharacter } from './characters.js';
+import { createCharacter } from 'ara3d';
 
 export const WEATHER_PRESETS = {
   tarde: {
@@ -113,6 +114,11 @@ export class GameWorld {
     this.ambientVehicles = [];
     this.ambientDogs = [];
     this.usedNpcAppearanceSignatures = new Set();
+    this.araNpcSerial = 0;
+    this.araCharacterQueue = [];
+    this.araCharacterLoads = 0;
+    this.araCharacterConcurrency = 2;
+    this.playerMoveSpeed = 0;
     this.cloudMaterial = null;
     this.rainPoints = null;
     this.rainPositions = null;
@@ -512,6 +518,89 @@ export class GameWorld {
     this.playerAvatar = this._createPipeiroCharacter(null, null, { player: true, pose: 'player' });
     this.playerAvatar.position.set(0, 9.74, 13.9);
     this.scene.add(this.playerAvatar);
+    this._queueAraCharacter(this.playerAvatar, PLAYER_ARA_CHARACTER, {
+      detail: 'high',
+      targetHeight: 1.78,
+      player: true
+    });
+  }
+
+  _queueAraCharacter(avatar, profile, options = {}) {
+    if (!avatar || !profile) return;
+    avatar.userData.araLoading = true;
+    avatar.userData.araReady = false;
+    avatar.visible = false;
+    this.araCharacterQueue.push({ avatar, profile, options });
+    this._drainAraCharacterQueue();
+  }
+
+  _drainAraCharacterQueue() {
+    while (this.araCharacterLoads < this.araCharacterConcurrency && this.araCharacterQueue.length) {
+      const job = this.araCharacterQueue.shift();
+      this.araCharacterLoads += 1;
+      this._loadAraCharacter(job)
+        .catch((error) => {
+          job.avatar.userData.araLoading = false;
+          job.avatar.userData.araFailed = true;
+          job.avatar.visible = true;
+          console.warn('[Vento & Laje] não foi possível carregar o modelo humano; mantendo o personagem reserva:', error);
+        })
+        .finally(() => {
+          this.araCharacterLoads = Math.max(0, this.araCharacterLoads - 1);
+          this._drainAraCharacterQueue();
+        });
+    }
+  }
+
+  async _loadAraCharacter({ avatar, profile, options }) {
+    const character = await createCharacter(profile, {
+      detail: options.detail || 'low',
+      animations: ['idle', 'walk', 'run'],
+      rootMotion: false
+    });
+    const human = character.scene;
+    const bounds = new THREE.Box3().setFromObject(human);
+    const measuredHeight = Math.max(0.1, bounds.getSize(new THREE.Vector3()).y || character.height || 1.75);
+    const groupScale = Math.max(0.01, Math.abs(avatar.scale.y || 1));
+    const targetHeight = options.targetHeight || 1.68;
+    human.scale.setScalar(targetHeight / (measuredHeight * groupScale));
+    const groundedBounds = new THREE.Box3().setFromObject(human);
+    human.position.y -= groundedBounds.min.y;
+    human.updateMatrixWorld(true);
+
+    // Drop the primitive placeholder only after the real rigged human is ready.
+    const geometries = new Set();
+    const materials = new Set();
+    for (const child of [...avatar.children]) {
+      child.traverse((object) => {
+        if (object.geometry && !geometries.has(object.geometry)) {
+          geometries.add(object.geometry);
+          object.geometry.dispose();
+        }
+        if (object.material) {
+          const list = Array.isArray(object.material) ? object.material : [object.material];
+          for (const material of list) materials.add(material);
+        }
+      });
+      avatar.remove(child);
+    }
+    for (const material of materials) material.dispose();
+
+    human.traverse((object) => {
+      if (!object.isMesh) return;
+      object.castShadow = true;
+      object.receiveShadow = true;
+    });
+    avatar.add(human);
+    const mixer = new THREE.AnimationMixer(human);
+    const locomotion = character.locomotion(mixer);
+    locomotion.speed = 0;
+    avatar.userData.walkParts = null;
+    avatar.userData.araHuman = { character, mixer, locomotion };
+    avatar.userData.araLoading = false;
+    avatar.userData.araReady = true;
+    avatar.userData.araFailed = false;
+    avatar.visible = true;
   }
 
   _createPipeiroCharacter(shirtHex = null, shortsHex = null, options = {}) {
@@ -896,6 +985,11 @@ export class GameWorld {
     if (grouped) parent.add(avatar);
     else this.scene.add(avatar);
     this.ambientPeople.push({ avatar, x, z, baseY, phase, radius, speed, mapId, grouped });
+    const npcProfile = createNpcAraCharacter(this.araNpcSerial++);
+    this._queueAraCharacter(avatar, npcProfile, {
+      detail: 'low',
+      targetHeight: 1.64
+    });
   }
 
   _buildAlternativeMaps() {
@@ -1109,6 +1203,10 @@ export class GameWorld {
           const pipeiro = this._createPipeiroCharacter(rivalInfo.shirt, 0x0f172a);
           pipeiro.position.set(0, h + 0.22, -0.4);
           house.add(pipeiro);
+          this._queueAraCharacter(pipeiro, createNpcAraCharacter(this.araNpcSerial++), {
+            detail: 'low',
+            targetHeight: 1.68
+          });
 
           this.rivalSpots.push({
             name: rivalInfo.name,
@@ -1384,7 +1482,13 @@ export class GameWorld {
 
   update(windVec, time, dt, showPlayerAvatar = false) {
     if (this.playerAvatar) {
-      this.playerAvatar.visible = showPlayerAvatar;
+      this.playerAvatar.visible = showPlayerAvatar && (this.playerAvatar.userData.araReady || this.playerAvatar.userData.araFailed);
+      const human = this.playerAvatar.userData.araHuman;
+      if (human) {
+        human.locomotion.speed = this.playerMoveSpeed > 6 ? 3.4 : this.playerMoveSpeed > 0 ? 1.55 : 0;
+        human.mixer.update(dt);
+        human.character.update(dt);
+      }
     }
     this._updateDynamicDayCycle(dt);
 
@@ -1440,14 +1544,23 @@ export class GameWorld {
       person.avatar.position.y = person.baseY + Math.abs(stride) * 0.025;
       person.avatar.position.z = person.z + Math.cos(phase * 0.72) * person.radius * 0.34;
       person.avatar.rotation.y = Math.atan2(Math.cos(phase) * person.radius, -Math.sin(phase * 0.72) * person.radius * 0.34);
-      const parts = person.avatar.userData.walkParts;
-      if (parts) {
-        parts.leftLeg.rotation.x = stride * 0.3;
-        parts.rightLeg.rotation.x = -stride * 0.3;
-        if (parts.leftCalf) parts.leftCalf.rotation.x = Math.max(0, -stride) * 0.34;
-        if (parts.rightCalf) parts.rightCalf.rotation.x = Math.max(0, stride) * 0.34;
-        parts.leftArm.rotation.x = (parts.armBaseLeft ?? 0) - stride * 0.15;
-        parts.rightArm.rotation.x = (parts.armBaseRight ?? 0) + stride * 0.15;
+      const human = person.avatar.userData.araHuman;
+      if (human) {
+        const speedX = Math.cos(phase) * person.speed * person.radius;
+        const speedZ = -Math.sin(phase * 0.72) * person.speed * person.radius * 0.72 * 0.34;
+        human.locomotion.speed = Math.min(1.65, Math.max(0.55, Math.hypot(speedX, speedZ) * 1.8));
+        human.mixer.update(dt);
+        human.character.update(dt);
+      } else {
+        const parts = person.avatar.userData.walkParts;
+        if (parts) {
+          parts.leftLeg.rotation.x = stride * 0.3;
+          parts.rightLeg.rotation.x = -stride * 0.3;
+          if (parts.leftCalf) parts.leftCalf.rotation.x = Math.max(0, -stride) * 0.34;
+          if (parts.rightCalf) parts.rightCalf.rotation.x = Math.max(0, stride) * 0.34;
+          parts.leftArm.rotation.x = (parts.armBaseLeft ?? 0) - stride * 0.15;
+          parts.rightArm.rotation.x = (parts.armBaseRight ?? 0) + stride * 0.15;
+        }
       }
     }
 

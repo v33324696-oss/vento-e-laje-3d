@@ -604,6 +604,7 @@ class Pipa3DGame {
   }
 
   _updateCharacterMovement(dt) {
+    this.world.playerMoveSpeed = 0;
     if (!this.characterMode || this.rabiolaLock) return;
     const avatar = this.world.playerAvatar;
     const direction = new THREE.Vector3();
@@ -617,6 +618,7 @@ class Pipa3DGame {
       direction.normalize();
       const moveSpeed = this.keys['ShiftLeft'] || this.keys['ShiftRight'] || this.touchSprint ? 8.2 : 4.8;
       this.characterMoveSpeed = moveSpeed;
+      this.world.playerMoveSpeed = moveSpeed;
       avatar.position.addScaledVector(direction, moveSpeed * dt);
       if (this.selectedMap === 'laje') {
         avatar.position.x = THREE.MathUtils.clamp(avatar.position.x, -4.6, 4.6);

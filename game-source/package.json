@@ -1,6 +1,6 @@
 {
   "name": "pipa-3d-realista",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
   "type": "module",
   "description": "Jogo 3D realista de Pipa Brasileira — Vento, Laje, Carretilha e Combate Aéreo",
@@ -11,7 +11,9 @@
     "server": "node server.js",
     "dev:all": "node run-dev.js",
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "predev": "npm install --no-save --package-lock=false --no-audit --no-fund ara3d@0.19.0",
+    "prebuild": "npm install --no-save --package-lock=false --no-audit --no-fund ara3d@0.19.0"
   },
   "dependencies": {
     "three": "^0.187.0",

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createNpcAppearance, PLAYER_PIPEIRO_APPEARANCE } from '../src/characters.js';
+import { createNpcAppearance, PLAYER_PIPEIRO_APPEARANCE, PLAYER_ARA_CHARACTER, createNpcAraCharacter } from '../src/characters.js';
 
 function seededRandom(seed = 23) {
   let state = seed;
@@ -63,4 +63,28 @@ test('humanoid character construction uses rounded anatomical geometry', async (
   assert.match(characterBuilder, /leftCalf:\s*calves\[0\]/, 'legs should have articulated lower-leg joints');
   assert.match(characterBuilder, /new THREE\.TubeGeometry/, 'facial features and clothing seams should use curved geometry');
   assert.doesNotMatch(characterBuilder, /new THREE\.BoxGeometry\(0\.51/, 'the torso must not be a rectangular box');
+});
+
+
+test('the main player recipe uses a fully dressed rigged streetwear human', () => {
+  const params = PLAYER_ARA_CHARACTER.params;
+  assert.equal(PLAYER_ARA_CHARACTER.kind, 'ara-character');
+  assert.equal(PLAYER_ARA_CHARACTER.preset, 'The Gamer');
+  assert.equal(params.top, 'oversized_tee');
+  assert.equal(params.bottom, 'cargo_shorts');
+  assert.equal(params.hair, 'afro01');
+  assert.ok(params.accessories.includes('cuban_chain'));
+  assert.ok(params.accessories.includes('silver_cross'));
+  assert.ok(params.tattoos.includes('forearm_l'));
+  assert.equal(params.rig, 'game');
+});
+
+test('street residents get deterministic but distinct ages, hair, clothes and seeds', () => {
+    const people = Array.from({ length: 20 }, (_, index) => createNpcAraCharacter(index));
+  assert.equal(new Set(people.map((person) => person.params.seed)).size, 20);
+  assert.ok(people.some((person) => person.params.age > 0.8), 'there should be older residents');
+  assert.ok(people.some((person) => person.params.age < 0.3), 'there should be younger residents');
+  assert.ok(new Set(people.map((person) => person.params.hair)).size > 3);
+  assert.ok(new Set(people.map((person) => person.params.top)).size > 1);
+  assert.ok(new Set(people.map((person) => person.params.bottom)).size > 1);
 });
