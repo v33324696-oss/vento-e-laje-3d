@@ -18,6 +18,7 @@ import { ProgressionStore } from './progression.js';
 import { getAIDifficulty, getCombatDamageMultipliers } from './difficulty.js';
 import { findRabiolaCapture } from './capture.js';
 import { NeighborhoodEventDirector } from './worldEvents.js';
+import { TUTORIAL_STEPS, getTutorialStep } from './tutorial.js';
 import {
   createRabiolaLockState,
   getRabiolaLockReading,
@@ -91,6 +92,7 @@ class Pipa3DGame {
     this.onlineRoomCode = null;
     this.onlineRoster = [];
     this.flightSaveAccumulator = 0;
+    this.tutorialIndex = 0;
 
     // Wind state
     this.windVec = new THREE.Vector3(0, 0.4, -9.5);
@@ -519,6 +521,13 @@ class Pipa3DGame {
     });
     document.getElementById('btn-help').addEventListener('click', () => {
       document.getElementById('controls-guide').classList.toggle('hidden');
+    });
+    document.getElementById('btn-tutorial')?.addEventListener('click', () => this._openTutorial());
+    document.getElementById('btn-tutorial-prev')?.addEventListener('click', () => this._setTutorialStep(this.tutorialIndex - 1));
+    document.getElementById('btn-tutorial-next')?.addEventListener('click', () => this._advanceTutorial());
+    document.getElementById('btn-tutorial-skip')?.addEventListener('click', () => this._closeTutorial(true));
+    document.getElementById('btn-tutorial-help')?.addEventListener('click', () => {
+      document.getElementById('controls-guide')?.classList.toggle('hidden');
     });
 
     document.getElementById('btn-relaunch').addEventListener('click', () => {
@@ -1491,6 +1500,54 @@ class Pipa3DGame {
     }
   }
 
+  _openTutorialIfNeeded() {
+    if (this.gameMode === 'online') return;
+    let completed = false;
+    try { completed = localStorage.getItem('vento-laje-flight-tutorial-v1') === 'done'; } catch {}
+    if (!completed) this._openTutorial();
+  }
+
+  _openTutorial() {
+    this.tutorialIndex = 0;
+    this._setTutorialStep(this.tutorialIndex);
+    document.getElementById('tutorial-overlay')?.classList.remove('hidden');
+  }
+
+  _setTutorialStep(index) {
+    this.tutorialIndex = Math.max(0, Math.min(TUTORIAL_STEPS.length - 1, Math.floor(index)));
+    const step = getTutorialStep(this.tutorialIndex);
+    if (!step) return;
+    const setText = (id, value) => {
+      const element = document.getElementById(id);
+      if (element) element.textContent = value;
+    };
+    setText('tutorial-step-count', `ETAPA ${this.tutorialIndex + 1} DE ${TUTORIAL_STEPS.length}`);
+    setText('tutorial-title', step.title);
+    setText('tutorial-description', step.description);
+    setText('tutorial-hint', step.hint);
+    const progress = document.getElementById('tutorial-progress');
+    if (progress) progress.style.width = `${(this.tutorialIndex + 1) / TUTORIAL_STEPS.length * 100}%`;
+    const previous = document.getElementById('btn-tutorial-prev');
+    if (previous) previous.disabled = this.tutorialIndex === 0;
+    const next = document.getElementById('btn-tutorial-next');
+    if (next) next.textContent = this.tutorialIndex === TUTORIAL_STEPS.length - 1 ? 'CONCLUIR' : 'PRÓXIMA ETAPA';
+  }
+
+  _advanceTutorial() {
+    if (this.tutorialIndex >= TUTORIAL_STEPS.length - 1) {
+      this._closeTutorial(true);
+      return;
+    }
+    this._setTutorialStep(this.tutorialIndex + 1);
+  }
+
+  _closeTutorial(completed = false) {
+    document.getElementById('tutorial-overlay')?.classList.add('hidden');
+    if (completed) {
+      try { localStorage.setItem('vento-laje-flight-tutorial-v1', 'done'); } catch {}
+    }
+  }
+
   startGame() {
     if (this.started) return true;
     const welcome = document.getElementById('welcome-modal');
@@ -1510,6 +1567,7 @@ class Pipa3DGame {
         'Use WASD para andar, SHIFT para correr e dê três tapas no botão de lançamento para colocar a pipa no alto.',
         'normal'
       );
+      this._openTutorialIfNeeded();
       window.__pipaBootError = null;
       return true;
     } catch (error) {
