@@ -47,7 +47,7 @@ const safeState = (state = {}) => {
     largadaTagActive: state.largadaTagActive === true,
     largadaQuality: Number.isFinite(Number(state.largadaQuality)) ? Math.max(0, Math.min(1, Number(state.largadaQuality))) : 0,
     linePower: Number.isFinite(Number(state.linePower)) ? Math.max(0.55, Math.min(1.2, Number(state.linePower))) : 0.8,
-    lineIntegrity: Number.isFinite(Number(state.lineIntegrity)) ? Math.max(0, Math.min(1, Number(state.lineIntegrity))) : 1,
+    lineIntegrity: Number.isFinite(Number(state.lineIntegrity)) ? Math.max(0, Math.min(1, Number(state.lineIntegrity))) : 1,\n    lineDurability: Number.isFinite(Number(state.lineDurability)) ? Math.max(0.55, Math.min(1.35, Number(state.lineDurability))) : 1,\n    lineRecovery: Number.isFinite(Number(state.lineRecovery)) ? Math.max(0.1, Math.min(1.2, Number(state.lineRecovery))) : 0.45,
     modelId: typeof state.modelId === 'string' ? state.modelId.slice(0, 24) : 'murcha',
     patternId: typeof state.patternId === 'string' ? state.patternId.slice(0, 32) : 'estrela_paulista',
     lineTypeId: typeof state.lineTypeId === 'string' ? state.lineTypeId.slice(0, 32) : 'branca_pura',
@@ -148,7 +148,7 @@ function updateRoomRelo(room, dt, now) {
 
       let fight = room.fights.get(key);
       if (!fight) {
-        fight = { integrityA: 1, integrityB: 1, lastTouch: now };
+        fight = { integrityA: a.state.lineIntegrity, integrityB: b.state.lineIntegrity, lastTouch: now, contactSince: now };
         room.fights.set(key, fight);
       }
       fight.lastTouch = now;
@@ -158,14 +158,14 @@ function updateRoomRelo(room, dt, now) {
         kiteSpeed: Math.hypot(...a.state.kiteVelocity), relativeSpeed,
         socada: a.state.socada, disque: a.state.disque,
         largadaActive: a.state.largadaActive, largadaQuality: a.state.largadaQuality,
-        linePower: a.state.linePower, ownU: contact.s, targetU: contact.t
+        linePower: a.state.linePower, ownU: contact.s, targetU: contact.t, wrapQuality
       });
       const scoreB = evaluateReloScore({
         crossingQuality, tension: b.state.tension, reelSpeed: b.state.reelSpeed,
         kiteSpeed: Math.hypot(...b.state.kiteVelocity), relativeSpeed,
         socada: b.state.socada, disque: b.state.disque,
         largadaActive: b.state.largadaActive, largadaQuality: b.state.largadaQuality,
-        linePower: b.state.linePower, ownU: contact.t, targetU: contact.s
+        linePower: b.state.linePower, ownU: contact.t, targetU: contact.s, wrapQuality
       });
 
       const frictionFactor = 0.38 + crossingQuality * 0.18;
