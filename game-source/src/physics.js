@@ -372,20 +372,30 @@ export class KiteEntity {
     const steer = THREE.MathUtils.clamp(controls.steer || 0, -1, 1);
     const rabicoWildness = 1.0 + (1.0 - tailRatio) * 1.15;
 
-    if (Math.abs(steer) > 0.04) {
-      // The nose turns at a controllable rate; steering also banks the wing
-      // below, so input changes the actual lift direction instead of only its look.
-      const turnRate = 3.15 * spec.turnMult * (1 + (1 - tailRatio) * 0.28);
-      this.angularVel += (steer * turnRate - this.angularVel) * Math.min(1, stepDt * 24);
-    } else if ((controls.release || controls.quickRelease) && this.socadaBoost < 0.15) {
-      const spinTarget = spec.spinRate * (controls.quickRelease ? 0.78 : 0.42);
-      this.angularVel += (spinTarget - this.angularVel) * Math.min(1, stepDt * 5.2);
-    } else {
-      // A damped pendulum keeps the nose steady without swinging uncontrollably.
-      const pendulumRestore = -Math.sin(this.noseAngle) * (0.62 + aeroProfile.stability * 0.82) * tailRatio;
-      const rabicoSpin = tailRatio < 0.45 ? (0.45 - tailRatio) * 1.65 : 0;
-      const angularDamping = 1.45 + aeroProfile.stability * 0.72;
-      this.angularVel += (pendulumRestore + rabicoSpin - this.angularVel * angularDamping) * stepDt;
+    // Steering is a heading target, not an endless angular-speed command.
+    // Manual controls return the nose toward center when released; AI supplies
+    // its own world-relative target so every kite uses the same stable servo.
+    const steerTarget = THREE.MathUtils.clamp(
+      Number.isFinite(controls.steerTarget) ? controls.steerTarget : steer * 0.78,
+      -Math.PI,
+      Math.PI
+    );
+    let headingError = steerTarget - this.noseAngle;
+    while (headingError > Math.PI) headingError -= Math.PI * 2;
+    while (headingError < -Math.PI) headingError += Math.PI * 2;
+
+    const targetAngularVelocity = THREE.MathUtils.clamp(
+      headingError * (5.2 + spec.turnMult * 1.2),
+      -4.6 * spec.turnMult,
+      4.6 * spec.turnMult
+    );
+    const angularResponse = 1 - Math.exp(-stepDt * (13 + spec.turnMult * 3));
+    this.angularVel += (targetAngularVelocity - this.angularVel) * angularResponse;
+
+    // Untrimmed kites retain a little natural wobble, but it cannot overpower
+    // the pilot's heading target.
+    if (Math.abs(steer) < 0.02 && tailRatio < 0.45) {
+      this.angularVel += (0.45 - tailRatio) * 0.42 * stepDt;
     }
 
     this.noseAngle += this.angularVel * stepDt;
@@ -452,21 +462,21 @@ export class KiteEntity {
     this.velocity.addScaledVector(_DesiredVel, stepDt);
     this.velocity.multiplyScalar(Math.exp(-0.018 * stepDt));
 
-    // Directly steer actual kite movement in the tether tangent plane. This
-    // shared response applies to every model, including AI-controlled kites.
-    if (Math.abs(steer) > 0.02) {
-      const lateralVelocity = this.velocity.dot(_tRight);
-      const desiredLateralVelocity = steer * THREE.MathUtils.clamp(
-        4.8 + apparentSpeed * 0.34,
-        4.8,
-        9.2
-      );
-      const steeringBlend = Math.min(1, stepDt * 8.5);
-      this.velocity.addScaledVector(
-        _tRight,
-        (desiredLateralVelocity - lateralVelocity) * steeringBlend
-      );
-    }
+    // Closed-loop movement control in the tether's tangent plane. The kite
+    // reaches the commanded lateral velocity quickly and smoothly recenters
+    // when the input is released, instead of continuing to drift or spin.
+    const lateralVelocity = this.velocity.dot(_tRight);
+    const desiredLateralVelocity = steer * THREE.MathUtils.clamp(
+      6.0 + apparentSpeed * 0.36,
+      6.0,
+      10.5
+    );
+    const steeringResponse = Math.abs(steer) > 0.02 ? 14 : 2.8;
+    const steeringBlend = 1 - Math.exp(-stepDt * steeringResponse);
+    this.velocity.addScaledVector(
+      _tRight,
+      (desiredLateralVelocity - lateralVelocity) * steeringBlend
+    );
 
     this.position.addScaledVector(this.velocity, stepDt);
 
