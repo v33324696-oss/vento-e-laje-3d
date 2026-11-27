@@ -55,7 +55,7 @@ export class RivalAIController {
     if (!this.kite.active) {
       this.respawnTimer -= dt;
       if (this.respawnTimer <= 0) this.kite.spawnInSky(true);
-      return { pull: false, release: false, quickRelease: false, steer: 0 };
+      return { pull: false, release: false, quickRelease: false, steer: 0, steerTarget: 0 };
     }
 
     this.retargetTimer -= dt;
@@ -221,7 +221,7 @@ export class RivalAIController {
       }
     }
 
-    return { pull, release, quickRelease, steer };
+    return { pull, release, quickRelease, steer, steerTarget: desiredAngle };
   }
 
   onCut(respawnDelay = 4.2) {
