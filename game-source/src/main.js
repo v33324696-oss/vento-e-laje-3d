@@ -1390,10 +1390,16 @@ class Pipa3DGame {
     bindHoldBtn('act-pull', () => { this.uiHold.pull = true; }, () => { this.uiHold.pull = false; });
     bindHoldBtn('act-release', () => { this.uiHold.release = true; }, () => { this.uiHold.release = false; });
     bindHoldBtn('act-release-fast', () => { this.uiHold.quickRelease = true; }, () => { this.uiHold.quickRelease = false; });
-    document.getElementById('act-spin')?.addEventListener('pointerdown', (e) => {
+    document.getElementById('act-turn-left')?.addEventListener('pointerdown', (e) => {
       e.preventDefault(); this.sound.init();
-      if (this.playerKite.triggerSpin(Math.sign(this.padSteer) || (Math.sign(this.playerKite.noseAngle) || 1))) {
-        this.sound.playSocada(0.9); this._flashDeckBtn('act-spin');
+      if (this.playerKite.triggerTurn(-1)) {
+        this.sound.playSocada(0.9); this._flashDeckBtn('act-turn-left');
+      }
+    });
+    document.getElementById('act-turn-right')?.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); this.sound.init();
+      if (this.playerKite.triggerTurn(1)) {
+        this.sound.playSocada(0.9); this._flashDeckBtn('act-turn-right');
       }
     });
     document.getElementById('act-retao')?.addEventListener('pointerdown', (e) => {
