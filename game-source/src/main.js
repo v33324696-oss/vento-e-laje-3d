@@ -1474,7 +1474,8 @@ class Pipa3DGame {
         release: false,
         quickRelease: false,
         largada: false,
-        steer: Math.sin(t * 0.85) * 0.32
+        steer: Math.sin(t * 0.85) * 0.32,
+        steerTarget: Math.sin(t * 0.85) * 0.25
       };
     }
 
@@ -1513,7 +1514,7 @@ class Pipa3DGame {
     document.getElementById('pad-left')?.classList.toggle('pressed', steer < -0.2);
     document.getElementById('pad-right')?.classList.toggle('pressed', steer > 0.2);
 
-    return { pull, release, quickRelease, largada, steer };
+    return { pull, release, quickRelease, largada, steer, steerTarget: steer * 0.78 };
   }
 
   _openRabiolaLock(driftingKite) {
