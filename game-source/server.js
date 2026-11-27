@@ -321,7 +321,14 @@ wss.on('connection', (socket) => {
         return;
       }
       if (!room) {
-        room = { code, mapId: ['laje', 'praia', 'parque', 'campinho', 'morro'].includes(message.mapId) ? message.mapId : 'laje', players: new Map(), fights: new Map(), cooldowns: new Map() };
+        room = {
+          code,
+          mapId: ['laje', 'praia', 'parque', 'campinho', 'morro'].includes(message.mapId) ? message.mapId : 'laje',
+          difficulty: ['easy', 'normal', 'hard'].includes(message.difficulty) ? message.difficulty : 'normal',
+          players: new Map(),
+          fights: new Map(),
+          cooldowns: new Map()
+        };
         rooms.set(code, room);
       }
       if (room.players.size >= MAX_PLAYERS_PER_ROOM) {
@@ -339,7 +346,8 @@ wss.on('connection', (socket) => {
       room.players.set(currentPlayer.id, currentPlayer);
       send(socket, {
         type: 'joined', playerId: currentPlayer.id, roomCode: room.code,
-        mapId: room.mapId, players: roomRoster(room), maxPlayers: MAX_PLAYERS_PER_ROOM
+        mapId: room.mapId, difficulty: room.difficulty || 'normal',
+        players: roomRoster(room), maxPlayers: MAX_PLAYERS_PER_ROOM
       });
       broadcast(room, { type: 'roster', players: roomRoster(room) }, currentPlayer.id);
       return;
