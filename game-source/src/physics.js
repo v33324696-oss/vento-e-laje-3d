@@ -5,14 +5,10 @@ import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { KiteVisual } from './kiteMesh.js';
 import { LINE_TYPES } from './carretilha.js';
 import { evaluateReloScore } from './relo.js';
-import { bankSpanForSteering, calculateAerodynamicForces, getKiteAeroProfile, getWindPhase, sampleWindAt } from './kiteAerodynamics.js';
-import { calculateCableResponse, calculateStructuralResponse, calculateWinchResponse } from './kiteStructure.js';
 
 export const STRING_SEGMENTS = 28;
 
 // Normal kites fly forward at a moderate line angle, not straight overhead.
-const MAX_FLIGHT_ELEVATION_TAN = Math.tan(THREE.MathUtils.degToRad(56));
-
 // Computes closest points between 3D line segments P1-Q1 and P2-Q2
 export function closestPointsBetweenSegments(p1, q1, p2, q2, out1, out2) {
   _d1.subVectors(q1, p1);
@@ -97,15 +93,11 @@ export class KiteEntity {
     this.quaternion = new THREE.Quaternion();
     this.noseAngle = 0; // 0 = Up, + = Right, - = Left
     this.angularVel = 0;
-    this.cableTension = 0;
-    this.windPhase = getWindPhase(id || modelId);
     this.localWind = new THREE.Vector3();
     this.aeroDynamicPressure = 0;
-    this.angleOfAttack = 0.26;
-    this.bankAngle = 0;
     this.stalled = false;
 
-    this.tension = 0.32;
+    this.tension = 0.5;
     this.reelSpeed = 0; // + paying out, - reeling in
     this.socadaBoost = 0;
     this.disqueBoost = 0;
@@ -114,11 +106,6 @@ export class KiteEntity {
     this.disbicarBoost = 0;
     this.disbicarDir = 1;
     this.disbicarCooldown = 0;
-    this.turnCooldown = 0;
-    this.directionTarget = 0;
-    this.retaoBoost = 0;
-    this.retaoHeading = 0;
-    this.retaoCooldown = 0;
     this.reloContactTime = 0;
     this.tailCutCooldown = 0;
     this.largadaBoost = 0;
@@ -184,8 +171,7 @@ export class KiteEntity {
     this.reloContactTime = 0;
     this.noseAngle = (Math.random() - 0.5) * 0.35;
     this.angularVel = 0;
-    this.cableTension = 0;
-    this.tension = 0.32;
+    this.tension = 0.5;
     this.angleOfAttack = 0.26;
     this.bankAngle = 0;
     this.stalled = false;
@@ -214,7 +200,7 @@ export class KiteEntity {
     if (!this.active) return;
     this.socadaBoost = Math.min(1.35, this.socadaBoost + 0.95 * strength);
     this.tension = Math.min(1.0, this.tension + 0.45);
-    this.tension = Math.min(1, this.tension + 0.12 * strength);
+    this.lineLength = Math.max(this.minLine, this.lineLength - 0.38 * strength);
     // Lock spin immediately so kite shoots straight where its nose points!
     this.angularVel *= 0.15;
   }
@@ -236,33 +222,13 @@ export class KiteEntity {
     this.tension = 1.0;
   }
 
-  triggerTurn(dir = 1) {
-    if (!this.active || this.turnCooldown > 0 || this.retaoBoost > 0.05) return false;
-    // Select a flight heading to the chosen side. This is a controlled turn,
-    // not a continuous 360-degree spin of the kite.
-    this.directionTarget = (Math.sign(dir) || 1) * 1.12;
-    this.turnCooldown = 0.32;
-    return true;
-  }
-
-  triggerRetao() {
-    if (!this.active || this.retaoCooldown > 0 || this.retaoBoost > 0.05) return false;
-    // Retão is a short, straight dive toward the flyer, not a forward sprint.
-    this.retaoHeading = Math.PI;
-    this.directionTarget = 0;
-    this.retaoBoost = 0.95;
-    this.retaoCooldown = 1.35;
-    this.angularVel = 0;
-    return true;
-  }
-
   triggerDisbicar(dir = 1) {
     if (!this.active || this.disbicarCooldown > 0) return false;
     this.disbicarDir = Math.sign(dir) || 1;
     this.disbicarBoost = 1.0;
     this.disbicarCooldown = 0.48;
     this.tension = Math.min(1, this.tension + 0.38);
-    this.lineLength = Math.max(this.minLine, this.lineLength - 0.12);
+    this.lineLength = Math.max(this.minLine, this.lineLength - 0.85);
     this.angularVel += this.disbicarDir * 3.1;
     return true;
   }
@@ -291,17 +257,13 @@ export class KiteEntity {
     _noseDir.copy(_tUp).multiplyScalar(cosA).addScaledVector(_tRight, sinA).normalize();
 
     // Front (+Z of kite) faces generally toward anchor (-_rad), pitched back by angle of attack
-    const aoa = THREE.MathUtils.clamp(this.angleOfAttack - this.tension * 0.035 - this.socadaBoost * 0.04, 0.08, 0.68);
+    const aoa = 0.36 - this.tension * 0.14 - this.socadaBoost * 0.08;
     _kiteZ.copy(_rad).negate().addScaledVector(_noseDir, -aoa).normalize();
     _kiteX.crossVectors(_noseDir, _kiteZ).normalize();
     _kiteY.crossVectors(_kiteZ, _kiteX).normalize();
 
     _rotMat.makeBasis(_kiteX, _kiteY, _kiteZ);
     this.quaternion.setFromRotationMatrix(_rotMat);
-    if (Math.abs(this.bankAngle) > 0.0001) {
-      _bankQuat.setFromAxisAngle(_rad, this.bankAngle * 0.28);
-      this.quaternion.multiply(_bankQuat);
-    }
     void windVec;
   }
 
@@ -351,21 +313,19 @@ export class KiteEntity {
   }
 
   update({
-    controls = { pull: false, release: false, quickRelease: false, steer: 0 }, 
+    controls = { pull: false, release: false, quickRelease: false, steer: 0 },
     windVec,
     sunDir,
     cameraPos,
     minGroundY = 3.0,
     reloHighlightU = -1,
     reloHighlightStrength = 0,
-    dt = 0.016,
-    time = 0
+    dt = 0.016
   }) {
     if (!this.active) return;
 
     const stepDt = Math.min(0.033, dt);
     const spec = this.visual.spec;
-    const aeroProfile = getKiteAeroProfile(spec.id);
     const tailRatio = this.visual.getTailRatio();
 
     this.socadaBoost *= Math.pow(0.018, stepDt);
@@ -373,271 +333,148 @@ export class KiteEntity {
     this.disbicarBoost *= Math.pow(0.035, stepDt);
     if (this.disqueCooldown > 0) this.disqueCooldown = Math.max(0, this.disqueCooldown - stepDt);
     if (this.disbicarCooldown > 0) this.disbicarCooldown = Math.max(0, this.disbicarCooldown - stepDt);
-    if (this.turnCooldown > 0) this.turnCooldown = Math.max(0, this.turnCooldown - stepDt);
-    if (this.retaoCooldown > 0) this.retaoCooldown = Math.max(0, this.retaoCooldown - stepDt);
-    if (this.retaoBoost > 0) this.retaoBoost = Math.max(0, this.retaoBoost - stepDt);
     if (this.largadaCooldown > 0) this.largadaCooldown = Math.max(0, this.largadaCooldown - stepDt);
     if (this.largadaBoost > 0) this.largadaBoost = Math.max(0, this.largadaBoost - stepDt);
     if (this.largadaTagTimer > 0) this.largadaTagTimer = Math.max(0, this.largadaTagTimer - stepDt);
     if (this.tailCutCooldown > 0) this.tailCutCooldown = Math.max(0, this.tailCutCooldown - stepDt);
 
-    // 1. Line Reel & Tension state
-    let targetTension = 0.18;
+    // 1. Original winch, tension and kite response.
+    let targetTension = 0.44;
     this.reelSpeed = 0;
 
     if (controls.pull) {
-      this.reelSpeed = -12.5 * spec.speedMult;
+      this.reelSpeed = -15.5 * spec.speedMult;
       this.lineLength = Math.max(this.minLine, this.lineLength + this.reelSpeed * stepDt);
-      targetTension = 0.66;
+      targetTension = 0.90;
     } else if (controls.quickRelease) {
-      this.reelSpeed = 15.5;
+      this.reelSpeed = 29.0;
       this.lineLength = Math.min(this.maxLine, this.lineLength + this.reelSpeed * stepDt);
-      targetTension = 0.10;
+      targetTension = 0.055;
     } else if (controls.release) {
-      this.reelSpeed = 5.2;
+      this.reelSpeed = 8.2;
       this.lineLength = Math.min(this.maxLine, this.lineLength + this.reelSpeed * stepDt);
-      targetTension = 0.16;
+      targetTension = 0.24;
     }
 
-    // Manual inputs alter the desired feel, while the tether constraint below
-    // contributes the actual physical line tension.
-    targetTension = Math.min(1.0, targetTension + this.socadaBoost * 0.55 + this.disqueBoost * 0.55 + this.disbicarBoost * 0.32);
+    targetTension = Math.min(1.0,
+      targetTension + this.socadaBoost * 0.55
+        + this.disqueBoost * 0.55
+        + this.disbicarBoost * 0.32
+    );
+    this.tension += (targetTension - this.tension) * Math.min(1, stepDt * 10);
 
-    // 2. Nose Rotation ("Giro do bico" on slack vs Steering vs Rabiola Stabilization)
+    // 2. Classic nose rotation: direct steering with natural rabiola recovery.
     const steer = THREE.MathUtils.clamp(controls.steer || 0, -1, 1);
     const rabicoWildness = 1.0 + (1.0 - tailRatio) * 1.15;
 
-    // Steering changes the player's selected flight direction. The target
-    // remains selected after the button is released; AI keeps its own target.
-    if (this.isPlayer && Math.abs(steer) > 0.02) {
-      this.directionTarget = steer * 1.12;
-    }
-    let steerTarget = this.isPlayer
-      ? this.directionTarget
-      : THREE.MathUtils.clamp(
-          Number.isFinite(controls.steerTarget) ? controls.steerTarget : steer * 0.78,
-          -Math.PI,
-          Math.PI
-        );
-    if (this.retaoBoost > 0.05) steerTarget = this.retaoHeading;
-    let headingError = steerTarget - this.noseAngle;
-    while (headingError > Math.PI) headingError -= Math.PI * 2;
-    while (headingError < -Math.PI) headingError += Math.PI * 2;
-
-    const targetAngularVelocity = THREE.MathUtils.clamp(
-      headingError * (5.2 + spec.turnMult * 1.2),
-      -4.6 * spec.turnMult,
-      4.6 * spec.turnMult
-    );
-    const angularResponse = 1 - Math.exp(-stepDt * (13 + spec.turnMult * 3));
-    this.angularVel += (targetAngularVelocity - this.angularVel) * angularResponse;
-
-    // Untrimmed kites retain a little natural wobble, but it cannot overpower
-    // the pilot's heading target.
-    if (Math.abs(steer) < 0.02 && tailRatio < 0.45) {
-      this.angularVel += (0.45 - tailRatio) * 0.42 * stepDt;
+    if (Math.abs(steer) > 0.04) {
+      const turnRate = 3.65 * spec.turnMult * rabicoWildness;
+      this.angularVel += (steer * turnRate - this.angularVel) * Math.min(1, stepDt * 14);
+    } else if ((controls.release || controls.quickRelease) && this.socadaBoost < 0.15) {
+      const spinTarget = spec.spinRate * rabicoWildness * (controls.quickRelease ? 1.42 : 0.82);
+      this.angularVel += (spinTarget - this.angularVel)
+        * Math.min(1, stepDt * (controls.quickRelease ? 10 : 7));
+    } else {
+      const pendulumRestore = -Math.sin(this.noseAngle) * 2.15 * tailRatio;
+      const rabicoSpin = tailRatio < 0.45 ? (0.45 - tailRatio) * 3.8 : 0;
+      this.angularVel += (pendulumRestore + rabicoSpin - this.angularVel) * Math.min(1, stepDt * 6);
     }
 
     this.noseAngle += this.angularVel * stepDt;
     if (this.noseAngle > Math.PI) this.noseAngle -= Math.PI * 2;
     if (this.noseAngle < -Math.PI) this.noseAngle += Math.PI * 2;
 
-    // 3. Aerodynamic forces from the air moving relative to this kite.
-    // Each model has its own wing area, mass, lift, drag and passive stability.
-    sampleWindAt(windVec, this.position, time, this.windPhase, this.localWind);
+    // 3. Original target-velocity flight model.
+    this.localWind.copy(windVec);
+    const windSpeed = windVec.length();
+    this.aeroDynamicPressure = 0.5 * windSpeed * windSpeed;
+    this.stalled = false;
+
     this._computeTangentFrame(_rad, _tRight, _tUp);
     const cosA = Math.cos(this.noseAngle);
     const sinA = Math.sin(this.noseAngle);
     _noseDir.copy(_tUp).multiplyScalar(cosA).addScaledVector(_tRight, sinA).normalize();
 
-    _airRelative.subVectors(this.localWind, this.velocity);
-    const apparentSpeed = Math.max(0.001, _airRelative.length());
-    const sideSlip = Math.abs(_airRelative.dot(_tRight)) / apparentSpeed;
-    // Keep normal steering in the attached-flow range. Hard turns and
-    // strong sideways airflow can still stall the kite, but ordinary pursuit
-    // should not lose all lift just because the pilot is trying to climb.
-    const maneuverLoad = Math.abs(steer) * 0.065 + Math.abs(this.angularVel) * 0.009;
-    const targetAoA = THREE.MathUtils.clamp(
-      0.22 + sideSlip * 0.25 + maneuverLoad + (1 - this.tension) * 0.025,
-      0.09,
-      0.60
-    );
-    this.angleOfAttack += (targetAoA - this.angleOfAttack) * Math.min(1, stepDt * 11.5);
-    const bankLimit = tailRatio < 0.45 ? 0.48 : 0.72;
-    const targetBank = THREE.MathUtils.clamp(
-      steer * bankLimit + this.angularVel * 0.018
-        + sideSlip * Math.sign(_airRelative.dot(_tRight)) * 0.035,
-      -bankLimit,
-      bankLimit
-    );
-    this.bankAngle += (targetBank - this.bankAngle) * Math.min(1, stepDt * 17);
-    bankSpanForSteering(_tRight, _airRelative, this.bankAngle, _bankedSpan);
+    const activeInput = (controls.pull ? 1.0 : 0.0)
+      + Math.abs(steer) * 0.65
+      + this.disbicarBoost * 0.75;
+    const forwardDrive =
+      (1.35 + activeInput * 9.8 + this.socadaBoost * 25.5 + this.disbicarBoost * 8.5)
+      * spec.speedMult
+      * (windSpeed / 9.0);
 
-    const aero = calculateAerodynamicForces({
-      airVelocity: _airRelative,
-      spanDirection: _bankedSpan,
-      forwardDirection: _noseDir,
-      modelId: spec.id,
-      tailRatio,
-      angleOfAttack: this.angleOfAttack
-    });
-    this.aeroDynamicPressure = aero.dynamicPressure;
-    this.stalled = aero.stalled;
+    _DesiredVel.copy(_noseDir).multiplyScalar(forwardDrive);
 
-    // Gravity is in game-scale units. Allow real aerodynamic lift to raise
-    // the kite, but cap the net upward acceleration and damp existing climb
-    // speed so steady wind cannot send it endlessly toward the sky.
-    const gravity = 2.45;
-    const maxVerticalLift = gravity + 1.0;
-    const supportedVerticalAero = Math.min(aero.fy, maxVerticalLift);
-    const upwardMotionDamping = Math.max(0, this.velocity.y) * 0.48;
-    _DesiredVel.set(
-      aero.fx,
-      supportedVerticalAero - gravity - upwardMotionDamping,
-      aero.fz
-    );
-    // Immediate pilot authority: steering adds a bounded lateral acceleration
-    // while aerodynamic banking and nose rotation build underneath it.
-    // Steering is applied as a closed-loop lateral velocity command after integration.
-
-    // Hand inputs remain impulses layered on top of the aerodynamic flight.
-    _DesiredVel.addScaledVector(_noseDir,
-      this.socadaBoost * 8.0 + this.disbicarBoost * 4.0
-      + this.retaoBoost * 11.0 + (controls.pull ? 0.3 : 0));
-    if (this.disqueBoost > 0.01) {
-      _DesiredVel.addScaledVector(_tRight, this.disqueDir * this.disqueBoost * 13.0 * spec.speedMult);
+    if (this.disqueBoost > 0.05) {
+      _DesiredVel.addScaledVector(_tRight, this.disqueDir * this.disqueBoost * 25.0 * spec.speedMult);
     }
-    if (this.disbicarBoost > 0.01) {
-      _DesiredVel.addScaledVector(_tRight, this.disbicarDir * this.disbicarBoost * 6.0 * spec.speedMult);
+    if (this.disbicarBoost > 0.05) {
+      _DesiredVel.addScaledVector(_tRight, this.disbicarDir * this.disbicarBoost * 13.5 * spec.speedMult);
+      _DesiredVel.addScaledVector(_noseDir, this.disbicarBoost * 7.0 * spec.speedMult);
     }
 
-    // Integrate acceleration. Aerodynamic drag naturally damps motion relative
-    // to the changing air mass instead of steering toward an artificial velocity.
-    this.velocity.addScaledVector(_DesiredVel, stepDt);
-    this.velocity.multiplyScalar(Math.exp(-0.018 * stepDt));
+    const slack = 1.0 - this.tension;
+    _DesiredVel.addScaledVector(windVec, 0.36 + slack * 0.68);
+    const highAngleDrag = Math.max(0, _rad.y - 0.46) * 9.5;
+    const netVertical =
+      (windSpeed * 0.30 * (0.48 + this.tension * 0.52))
+      - (2.45 + slack * 2.6 + highAngleDrag);
+    _DesiredVel.y += netVertical;
 
-    // Pilot flight authority: Phase 1 moved from a controlled velocity model
-    // to pure aerodynamic acceleration. Keep the aerodynamic forces above, but
-    // restore a responsive speed command along the kite's actual nose direction.
-    // Because this runs in KiteEntity.update, every kite model and AI rival gets it.
-    const steeringDemand = Math.abs(steer);
-    const pullDemand = controls.pull ? 1 : 0;
-    const selectedTurnDemand = this.isPlayer ? Math.abs(this.directionTarget) / 1.12 : steeringDemand;
-    const maneuverDemand = Math.max(steeringDemand, pullDemand, selectedTurnDemand * 0.7, this.retaoBoost > 0.05 ? 1 : 0);
-    if (maneuverDemand > 0.02) {
-      const windFactor = THREE.MathUtils.clamp(this.localWind.length() / 9, 0.62, 1.42);
-      const activeInput = pullDemand + steeringDemand * 0.65 + this.disbicarBoost * 0.35;
-      const desiredForwardSpeed = THREE.MathUtils.clamp(
-        (activeInput * 9.8 + selectedTurnDemand * 2.6 + this.socadaBoost * 5.0 + this.disbicarBoost * 4.0 + this.retaoBoost * 7.0)
-          * spec.speedMult * windFactor,
-        0,
-        18
-      );
-      const currentForwardSpeed = this.velocity.dot(_noseDir);
-      const driveResponse = 1 - Math.exp(-stepDt * (steeringDemand > 0.02 ? 10.5 : 8.0));
-      this.velocity.addScaledVector(
-        _noseDir,
-        (desiredForwardSpeed - currentForwardSpeed) * driveResponse
-      );
-    }
-
+    // Match the original kite's smooth, readable acceleration response.
+    this.velocity.lerp(_DesiredVel, Math.min(1, stepDt * 7.5));
     this.position.addScaledVector(this.velocity, stepDt);
 
-    // A real kite flies in a forward window, not directly over the flyer.
-    // Limit the line's elevation angle to 56 degrees above the horizon. This
-    // is a shared constraint for the player and every AI kite, so rivals stay
-    // in the same reachable airspace and can still be challenged from below.
-    const horizontalX = this.position.x - this.anchorPos.x;
-    const horizontalZ = this.position.z - this.anchorPos.z;
-    const horizontalDistance = Math.hypot(horizontalX, horizontalZ);
-    const verticalDistance = this.position.y - this.anchorPos.y;
-    const maxVerticalDistance = horizontalDistance * MAX_FLIGHT_ELEVATION_TAN;
-    if (verticalDistance > maxVerticalDistance) {
-      this.position.y = this.anchorPos.y + maxVerticalDistance;
-      _flightConeNormal.set(
-        -MAX_FLIGHT_ELEVATION_TAN * horizontalX / Math.max(0.001, horizontalDistance),
-        1,
-        -MAX_FLIGHT_ELEVATION_TAN * horizontalZ / Math.max(0.001, horizontalDistance)
-      ).normalize();
-
-      // Remove only velocity that would push the kite farther outside the
-      // flight window; tangential movement along the window remains free.
-      const outwardClimb = this.velocity.dot(_flightConeNormal);
-      if (outwardClimb > 0) {
-        this.velocity.addScaledVector(_flightConeNormal, -outwardClimb);
-      }
-    }
-
-    // 4. Keep kite in forward sky arena & enforce spherical tether constraint
-    // Prevent flying behind the player's back (+Z)
+    // 4. Original forward-airspace and soft tether constraint.
     const maxZ = this.anchorPos.z - 8.5;
     if (this.position.z > maxZ) {
       this.position.z = maxZ;
       if (this.velocity.z > 0) this.velocity.z *= -0.25;
     }
 
-    // Unilateral tether: it only pulls, never pushes. A winch shortens the
-    // permitted radius and progressively removes outward radial velocity.
     _rad.subVectors(this.position, this.anchorPos);
-    let currDist = _rad.length() || 1;
-    let cableTensionTarget = this.reelSpeed < -0.1 ? 0.58 : 0.18;
-    const extension = Math.max(0, currDist - this.lineLength);
-    const nearTaut = currDist >= this.lineLength - (this.reelSpeed < -0.1 ? 0.8 : 0.18);
+    const currDist = _rad.length() || 1;
+    if (currDist > this.lineLength || this.tension > 0.35) {
+      const targetR = THREE.MathUtils.lerp(
+        currDist,
+        this.lineLength,
+        this.tension > 0.5 ? 0.85 : 0.45
+      );
+      _rad.multiplyScalar(targetR / currDist);
+      this.position.copy(this.anchorPos).add(_rad);
 
-    if (extension > 0.001 || (this.reelSpeed < -0.1 && nearTaut)) {
-      _rad.divideScalar(currDist);
+      _rad.normalize();
       const radialVelocity = this.velocity.dot(_rad);
-      const cable = calculateCableResponse(extension, Math.max(0, radialVelocity), this.lineType);
-      cableTensionTarget = Math.max(cableTensionTarget, cable.tension);
-
-      // Correct the geometric over-extension completely, so the line never
-      // jitters outside its deployed length from a partially corrected spring.
-      if (extension > 0.001) {
-        this.position.addScaledVector(_rad, -extension);
-        currDist = this.lineLength;
-      }
-
-      // While pulling, the reel physically hauls the kite inward. The response
-      // is damped over several frames instead of teleporting its velocity.
-      const winch = calculateWinchResponse(radialVelocity, this.reelSpeed, stepDt, this.lineType);
-      if (winch.velocityChange < 0) {
-        this.velocity.addScaledVector(_rad, winch.velocityChange);
-      } else if (radialVelocity > Math.max(0, this.reelSpeed)) {
-        this.velocity.addScaledVector(_rad, -Math.min(radialVelocity - Math.max(0, this.reelSpeed), cable.radialImpulse));
+      if (radialVelocity > Math.max(0, this.reelSpeed)) {
+        this.velocity.addScaledVector(
+          _rad,
+          -(radialVelocity - Math.max(0, this.reelSpeed))
+        );
       }
     }
 
-    this.cableTension += (cableTensionTarget - this.cableTension) * Math.min(1, stepDt * 7);
-    const physicalTension = Math.max(targetTension, this.cableTension);
-    this.tension += (physicalTension - this.tension) * Math.min(1, stepDt * 7);
-
-    // Rooftop / Ground floor safety check
+    // 5. Keep the old ground recovery without adding a new flight ceiling.
     if (this.position.y < minGroundY) {
       this.position.y = minGroundY;
       if (this.velocity.y < 0) this.velocity.y = Math.abs(this.velocity.y) * 0.35 + 2.5;
-      // Gently nudge nose upward so kite climbs away from street/roof
       this.noseAngle *= 0.82;
     }
 
-    // 5. Update 3D Kite Visual, Rabiola & Catenary String
-    this._updateOrientation(this.localWind);
-    const aeroLoad = Math.min(1.2, 0.16 + Math.min(0.68, this.aeroDynamicPressure * 0.007) + this.tension * 0.28 + this.socadaBoost * 0.4 - (this.stalled ? 0.10 : 0));
-    const structural = calculateStructuralResponse(this.aeroDynamicPressure, spec.id, this.condition ?? 100);
+    // Preserve condition wear, RELO highlighting and the current physical string.
+    const aeroLoad = Math.min(1.2, 0.22 + this.tension * 0.38 + this.socadaBoost * 0.65);
+    this._updateOrientation(windVec);
 
     this.visual.update({
       position: this.position,
       quaternion: this.quaternion,
       aeroLoad,
-      windVec: this.localWind,
+      windVec,
       sunDir,
       cameraPos,
-      structuralLoad: structural.strain,
-      angleOfAttack: this.angleOfAttack,
-      stalled: this.stalled,
       dt: stepDt
     });
 
-    this._updateStringCurve(this.localWind, reloHighlightU, reloHighlightStrength, stepDt);
+    this._updateStringCurve(windVec, reloHighlightU, reloHighlightStrength, stepDt);
   }
 
   dispose() {
