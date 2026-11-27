@@ -2846,7 +2846,8 @@ const bootPipaGame = () => {
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', bootPipaGame, { once: true });
 } else {
-  bootPipaGame();
+  // Let the module finish initializing its shared constants before creating the game.
+  Promise.resolve().then(bootPipaGame);
 }
 
 const _ptA = new THREE.Vector3();
