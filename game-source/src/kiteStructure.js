@@ -27,9 +27,9 @@ export function calculateStructuralResponse(dynamicPressure, modelId = 'murcha',
 // pull instead of snapping the kite to a perfect sphere every frame.
 export function calculateWinchResponse(radialVelocity, reelSpeed, dt, lineType = {}) {
   const step = clamp(Number(dt) || 0.016, 0.001, 0.04);
-  const responseRate = clamp(lineType.pullResponse ?? 4.8, 2.8, 7.2);
+  const responseRate = clamp(lineType.pullResponse ?? 10.5, 7.5, 13.5);
   const targetRadialSpeed = reelSpeed < 0
-    ? Math.max(-8.5, reelSpeed * 0.92)
+    ? Math.max(-13.5, reelSpeed * 0.96)
     : 0;
   const blend = 1 - Math.exp(-responseRate * step);
   const velocityChange = radialVelocity > targetRadialSpeed
