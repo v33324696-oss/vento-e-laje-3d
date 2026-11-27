@@ -1,19 +1,21 @@
 // Procedural Realistic Web Audio Engine for Pipa 3D.
 // Licensed CC0 foley references add real-world paper, reel and line details.
+// Each kite gets its own procedural paper/frame signature. These are synthesized
+// from the model's shape and frame feel, not falsely presented as field recordings.
 const KITE_SOUND_PROFILES = Object.freeze({
-  murcha:    { rate: 1.00, volume: 0.98 },
-  raia:      { rate: 1.13, volume: 0.86 },
-  latao:     { rate: 0.84, volume: 1.18 },
-  peixinho:  { rate: 1.07, volume: 0.91 },
-  papagaio:  { rate: 0.95, volume: 0.98 },
-  delta:     { rate: 1.09, volume: 0.94 },
-  estrela:   { rate: 0.88, volume: 1.08 },
-  hexagonal: { rate: 0.90, volume: 1.13 },
-  peixao:    { rate: 0.82, volume: 1.22 },
-  capucheta: { rate: 1.19, volume: 0.79 },
-  morcego:   { rate: 1.05, volume: 0.96 },
-  quadrada:  { rate: 0.93, volume: 0.95 },
-  rokkaku:   { rate: 0.89, volume: 1.06 }
+  murcha:    { rate: 1.00, volume: 0.98, tapTone: 220, tapFilter: 1420, tapDuration: 0.078, airTone: 1.00 },
+  raia:      { rate: 1.13, volume: 0.86, tapTone: 286, tapFilter: 1900, tapDuration: 0.061, airTone: 1.15 },
+  latao:     { rate: 0.84, volume: 1.18, tapTone: 148, tapFilter: 940,  tapDuration: 0.108, airTone: 0.86 },
+  peixinho:  { rate: 1.07, volume: 0.91, tapTone: 248, tapFilter: 1650, tapDuration: 0.067, airTone: 1.09 },
+  papagaio:  { rate: 0.95, volume: 0.98, tapTone: 211, tapFilter: 1380, tapDuration: 0.083, airTone: 0.97 },
+  delta:     { rate: 1.09, volume: 0.94, tapTone: 264, tapFilter: 1810, tapDuration: 0.071, airTone: 1.12 },
+  estrela:   { rate: 0.88, volume: 1.08, tapTone: 181, tapFilter: 1160, tapDuration: 0.096, airTone: 0.91 },
+  hexagonal: { rate: 0.90, volume: 1.13, tapTone: 172, tapFilter: 1080, tapDuration: 0.092, airTone: 0.92 },
+  peixao:    { rate: 0.82, volume: 1.22, tapTone: 136, tapFilter: 860,  tapDuration: 0.114, airTone: 0.82 },
+  capucheta: { rate: 1.19, volume: 0.79, tapTone: 314, tapFilter: 2140, tapDuration: 0.056, airTone: 1.22 },
+  morcego:   { rate: 1.05, volume: 0.96, tapTone: 238, tapFilter: 1540, tapDuration: 0.076, airTone: 1.07 },
+  quadrada:  { rate: 0.93, volume: 0.95, tapTone: 198, tapFilter: 1260, tapDuration: 0.087, airTone: 0.95 },
+  rokkaku:   { rate: 0.89, volume: 1.06, tapTone: 207, tapFilter: 1320, tapDuration: 0.082, airTone: 0.93 }
 });
 
 const FOLEY_URLS = Object.freeze({
@@ -232,6 +234,7 @@ export class SoundEngine {
     reloSpeed = 10,
     kiteModelId = 'murcha',
     kiteActive = true,
+    airborneKites = [],
     lineTension = 0.5,
     dt = 0.016
   }) {
@@ -258,14 +261,27 @@ export class SoundEngine {
 
     // Kite-specific paper flutter. Every model has its own pitch and loudness
     // profile, while the sound source remains the same physical paper-in-wind foley.
-    const kiteProfile = KITE_SOUND_PROFILES[kiteModelId] || KITE_SOUND_PROFILES.murcha;
+    const activeProfiles = Array.isArray(airborneKites)
+      ? airborneKites.filter((kite) => kite && KITE_SOUND_PROFILES[kite.modelId])
+        .map((kite) => KITE_SOUND_PROFILES[kite.modelId])
+      : [];
+    const kiteProfile = activeProfiles.length
+      ? activeProfiles.reduce((mix, profile) => ({
+        rate: mix.rate + profile.rate / activeProfiles.length,
+        volume: mix.volume + profile.volume / activeProfiles.length,
+        tapTone: mix.tapTone + profile.tapTone / activeProfiles.length,
+        tapFilter: mix.tapFilter + profile.tapFilter / activeProfiles.length,
+        tapDuration: mix.tapDuration + profile.tapDuration / activeProfiles.length,
+        airTone: mix.airTone + profile.airTone / activeProfiles.length
+      }), { rate: 0, volume: 0, tapTone: 0, tapFilter: 0, tapDuration: 0, airTone: 0 })
+      : (KITE_SOUND_PROFILES[kiteModelId] || KITE_SOUND_PROFILES.murcha);
     const flapStrength = Math.max(0, Math.min(1.5, windSpeed / 18 * 0.55 + kiteSpeed / 28 * 0.45));
     if (this.flutterFilter && this.flutterGain) {
       const flutterLevel = kiteActive
         ? Math.min(0.16, (0.009 + windSpeed * 0.0011 + kiteSpeed * 0.0025) * kiteProfile.volume)
         : 0.006;
       this.flutterFilter.frequency.setTargetAtTime(
-        760 + Math.min(1450, kiteSpeed * 38) * kiteProfile.rate,
+        (760 + Math.min(1450, kiteSpeed * 38) * kiteProfile.rate) * kiteProfile.airTone,
         now,
         0.12
       );
@@ -331,6 +347,90 @@ export class SoundEngine {
     gain.connect(this.masterGain);
     osc.start(now);
     osc.stop(now + 0.026);
+  }
+
+  // A hand flick: model-specific paper slap plus a short bamboo-frame resonance.
+  playLaunchTap(kiteModelId = 'murcha', runSpeed = 0, stage = 1) {
+    if (!this.initialized) this.init();
+    if (!this.initialized || !this.ctx || !this.enabled || !this.noiseBuffer) return;
+
+    const profile = KITE_SOUND_PROFILES[kiteModelId] || KITE_SOUND_PROFILES.murcha;
+    const now = this.ctx.currentTime;
+    const runBoost = Math.min(1, Math.max(0, runSpeed / 8.2));
+    const tapStrength = Math.min(1.25, 0.78 + runBoost * 0.34 + stage * 0.035);
+    const duration = profile.tapDuration;
+
+    const paper = this.ctx.createBufferSource();
+    paper.buffer = this.noiseBuffer;
+    paper.playbackRate.value = 0.92 + profile.rate * 0.08 + stage * 0.025;
+    const paperFilter = this.ctx.createBiquadFilter();
+    paperFilter.type = 'bandpass';
+    paperFilter.frequency.setValueAtTime(profile.tapFilter * (0.96 + stage * 0.035), now);
+    paperFilter.frequency.exponentialRampToValueAtTime(profile.tapFilter * 0.48, now + duration);
+    paperFilter.Q.value = 1.35 + profile.rate * 0.25;
+    const paperGain = this.ctx.createGain();
+    paperGain.gain.setValueAtTime(0.001, now);
+    paperGain.gain.linearRampToValueAtTime(0.26 * tapStrength * profile.volume, now + 0.006);
+    paperGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+    paper.connect(paperFilter);
+    paperFilter.connect(paperGain);
+    paperGain.connect(this.masterGain);
+    paper.start(now, Math.random() * 2.6, duration);
+
+    const frame = this.ctx.createOscillator();
+    const frameGain = this.ctx.createGain();
+    frame.type = 'triangle';
+    frame.frequency.setValueAtTime(profile.tapTone * (1 + stage * 0.045), now);
+    frame.frequency.exponentialRampToValueAtTime(profile.tapTone * 0.52, now + duration * 1.12);
+    frameGain.gain.setValueAtTime(0.001, now);
+    frameGain.gain.linearRampToValueAtTime(0.13 * tapStrength, now + 0.004);
+    frameGain.gain.exponentialRampToValueAtTime(0.001, now + duration * 1.16);
+    frame.connect(frameGain);
+    frameGain.connect(this.masterGain);
+    frame.start(now);
+    frame.stop(now + duration * 1.2);
+  }
+
+  // Final release: a rising paper rush with a light frame overtone.
+  playLaunchRelease(kiteModelId = 'murcha', quality = 0.7) {
+    if (!this.initialized) this.init();
+    if (!this.initialized || !this.ctx || !this.enabled) return;
+    const profile = KITE_SOUND_PROFILES[kiteModelId] || KITE_SOUND_PROFILES.murcha;
+    const now = this.ctx.currentTime;
+    const power = Math.min(1, Math.max(0.25, quality));
+
+    this._playReference('kiteFlap', 0.24 + power * 0.18 * profile.volume, profile.rate * 1.06);
+    if (!this.noiseBuffer) return;
+
+    const rush = this.ctx.createBufferSource();
+    rush.buffer = this.noiseBuffer;
+    rush.playbackRate.value = 0.72 + power * 0.3;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(profile.tapFilter * 0.72, now);
+    filter.frequency.exponentialRampToValueAtTime(profile.tapFilter * 1.65, now + 0.2);
+    filter.Q.value = 0.9;
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.15 * profile.volume, now + 0.025);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+    rush.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.masterGain);
+    rush.start(now, Math.random() * 2.4, 0.25);
+
+    const frame = this.ctx.createOscillator();
+    const frameGain = this.ctx.createGain();
+    frame.type = 'sine';
+    frame.frequency.setValueAtTime(profile.tapTone * 1.55, now);
+    frame.frequency.exponentialRampToValueAtTime(profile.tapTone * 2.25, now + 0.16);
+    frameGain.gain.setValueAtTime(0.001, now);
+    frameGain.gain.linearRampToValueAtTime(0.075 * power, now + 0.035);
+    frameGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+    frame.connect(frameGain);
+    frameGain.connect(this.masterGain);
+    frame.start(now);
+    frame.stop(now + 0.21);
   }
 
   // Crisp silk-paper snap when player jerks the line ("Socar / Dibicar")
