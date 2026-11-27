@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   calculateCableResponse,
+  calculateWinchResponse,
   calculateStructuralResponse,
   getTailDynamics
 } from '../src/kiteStructure.js';
@@ -52,4 +53,17 @@ test('rabiola mass and airflow change its motion profile', () => {
   assert.ok(lightTail.inertia < heavyTail.inertia);
   assert.ok(lightTail.windCoupling > heavyTail.windCoupling);
   assert.ok(cutTail.inertia < getTailDynamics('murcha', 1, 12).inertia);
+});
+
+test('holding the reel progressively pulls a kite toward its anchor', () => {
+  const firstFrame = calculateWinchResponse(0, -7.2, 1 / 60, { pullResponse: 4.8 });
+  const settled = calculateWinchResponse(-6.8, -7.2, 1 / 60, { pullResponse: 4.8 });
+  assert.ok(firstFrame.velocityChange < 0);
+  assert.ok(settled.velocityChange < 0);
+  assert.ok(Math.abs(settled.velocityChange) < Math.abs(firstFrame.velocityChange));
+});
+
+test('releasing the line does not actively push the kite outward', () => {
+  const response = calculateWinchResponse(-2, 5.2, 1 / 60, { pullResponse: 4.8 });
+  assert.equal(response.velocityChange, 0);
 });
