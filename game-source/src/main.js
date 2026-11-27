@@ -1492,22 +1492,36 @@ class Pipa3DGame {
   }
 
   startGame() {
-    // Starting is idempotent: repeated clicks/taps cannot reset the launch flow.
     if (this.started) return true;
-    this.sound.init();
-    this.started = true;
-    document.getElementById('welcome-modal')?.classList.add('hidden');
-    document.getElementById('hud-top')?.classList.remove('hud-hidden');
-    document.getElementById('controls-guide')?.classList.remove('hud-hidden');
-    if (!this.playerKiteInHand) this._preparePlayerKiteInHand();
-    this._enterPreLaunchMode();
-    this._updateCamera(0.04);
-    this._syncLaunchButton();
-    this.showBanner(
-      'PIPA NA MÃO',
-      'Use WASD para andar, SHIFT para correr e clique em DAR TAPA (ou aperte ESPAÇO/E) três vezes para lançar.',
-      'normal'
-    );
+    const welcome = document.getElementById('welcome-modal');
+    const status = document.getElementById('boot-status');
+    try {
+      this.sound.init();
+      if (!this.playerKiteInHand) this._preparePlayerKiteInHand();
+      this.started = true;
+      welcome?.classList.add('hidden');
+      document.getElementById('hud-top')?.classList.remove('hud-hidden');
+      document.getElementById('controls-guide')?.classList.remove('hud-hidden');
+      this._enterPreLaunchMode();
+      this._updateCamera(0.04);
+      this._syncLaunchButton();
+      this.showBanner(
+        'PIPA NA MÃO',
+        'Use WASD para andar, SHIFT para correr e dê três tapas no botão de lançamento para colocar a pipa no alto.',
+        'normal'
+      );
+      window.__pipaBootError = null;
+      return true;
+    } catch (error) {
+      this.started = false;
+      welcome?.classList.remove('hidden');
+      if (status) {
+        status.textContent = 'Não foi possível abrir a partida: ' + (error?.message || String(error)) + '. Recarregue a página se o erro continuar.';
+        status.classList.remove('hidden');
+      }
+      console.error('[Vento & Laje] falha ao abrir a partida:', error);
+      return false;
+    }
   }
 
   cycleCamera() {

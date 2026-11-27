@@ -600,50 +600,39 @@
 
       document.addEventListener('click', (event) => {
         const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+        const startButton = target?.closest('#btn-start-game');
+        if (startButton) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          const game = window.pipaGame;
+          if (game && typeof game.startGame === 'function') {
+            if (game.startGame()) {
+              document.getElementById('boot-status')?.classList.add('hidden');
+            }
+            return;
+          }
+          if (window.__pipaBootError) {
+            const details = window.__pipaBootError.message || String(window.__pipaBootError);
+            const hint = /webgl|context|gpu|renderer/i.test(details)
+              ? ' Ative a aceleração gráfica do Edge e reinicie o navegador.'
+              : ' Confira a conexão e recarregue a página.';
+            showBootStatus('O motor 3D encontrou um erro: ' + details + hint);
+            return;
+          }
+          window.__pipaPendingStart = true;
+          showBootStatus('Inicializando o jogo 3D… seu clique foi guardado e a partida abrirá assim que o motor estiver pronto.');
+          return;
+        }
+
         const modeCard = target?.closest('.mode-card');
         if (modeCard && (!window.pipaGame || typeof window.pipaGame.setGameMode !== 'function')) {
           event.preventDefault();
-          document.querySelectorAll('.mode-card').forEach((card) => {
-            card.classList.toggle('selected', card === modeCard);
-          });
+          document.querySelectorAll('.mode-card').forEach((card) => card.classList.toggle('selected', card === modeCard));
           window.__pipaPendingMode = modeCard.dataset.mode;
-          if (window.__pipaBootError) {
-            showBootStatus('O motor 3D não iniciou: ' + (window.__pipaBootError.message || String(window.__pipaBootError)));
-          } else {
-            showBootStatus('Carregando o motor 3D. O modo escolhido será aplicado assim que ele terminar de iniciar.');
-          }
-          return;
+          showBootStatus(window.__pipaBootError
+            ? 'O motor 3D não iniciou: ' + (window.__pipaBootError.message || String(window.__pipaBootError))
+            : 'Carregando o motor 3D. O modo escolhido será aplicado assim que ele terminar de iniciar.');
         }
-
-        const startButton = target?.closest('#btn-start-game');
-        if (!startButton) return;
-        event.preventDefault();
-        event.stopImmediatePropagation();
-
-        // Capture the primary action at document level so it still works if a
-        // later optional UI binding fails during initialization.
-        if (window.pipaGame && typeof window.pipaGame.startGame === 'function') {
-          try {
-            window.pipaGame.startGame();
-          } catch (error) {
-            console.error('[Vento & Laje] não foi possível abrir a partida:', error);
-            showBootStatus('Não foi possível iniciar a partida: ' + (error?.message || String(error)) + ' Recarregue a página e tente novamente.');
-          }
-          return;
-        }
-
-        if (window.__pipaBootError) {
-          const details = window.__pipaBootError.message || String(window.__pipaBootError);
-          const webglHint = /webgl|context|gpu|renderer/i.test(details)
-            ? ' Ative a aceleração gráfica do Edge e reinicie o navegador.'
-            : ' Confira a conexão e recarregue a página.';
-          showBootStatus('O motor 3D encontrou um erro: ' + details + webglHint);
-          return;
-        }
-
-        // Do not lose a start click made while the engine/module is loading.
-        window.__pipaPendingStart = true;
-        showBootStatus('Inicializando o jogo 3D… seu clique foi guardado e a partida abrirá assim que o motor estiver pronto.');
       }, true);
 
       window.addEventListener('error', (event) => {
