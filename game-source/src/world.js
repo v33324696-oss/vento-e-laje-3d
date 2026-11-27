@@ -4,6 +4,7 @@ import {
   createConcreteTextures,
   createCorrugatedRoofTexture
 } from './textures.js';
+import { createNpcAppearance, PLAYER_PIPEIRO_APPEARANCE } from './characters.js';
 
 export const WEATHER_PRESETS = {
   tarde: {
@@ -111,6 +112,7 @@ export class GameWorld {
     this.ambientPeople = [];
     this.ambientVehicles = [];
     this.ambientDogs = [];
+    this.usedNpcAppearanceSignatures = new Set();
     this.cloudMaterial = null;
     this.rainPoints = null;
     this.rainPositions = null;
@@ -507,55 +509,251 @@ export class GameWorld {
     this.scene.add(this.windRibbonLine);
 
     // Player Pipeiro avatar (shown when camera is in aerial chase mode)
-    this.playerAvatar = this._createPipeiroCharacter(0xef4444, 0x1e293b);
+    this.playerAvatar = this._createPipeiroCharacter(null, null, { player: true, pose: 'player' });
     this.playerAvatar.position.set(0, 9.74, 13.9);
     this.scene.add(this.playerAvatar);
   }
 
-  _createPipeiroCharacter(shirtHex = 0xfacc15, shortsHex = 0x1e3a8a) {
+  _createPipeiroCharacter(shirtHex = null, shortsHex = null, options = {}) {
+    const pose = options.pose || (options.player ? 'player' : 'kite');
+    const appearance = options.appearance || (options.player
+      ? PLAYER_PIPEIRO_APPEARANCE
+      : createNpcAppearance({
+          usedSignatures: this.usedNpcAppearanceSignatures,
+          preferredShirt: shirtHex,
+          preferredShorts: shortsHex
+        }));
+    const look = {
+      ...appearance,
+      shirtColor: shirtHex ?? appearance.shirtColor,
+      shortsColor: shortsHex ?? appearance.shortsColor
+    };
+
     const g = new THREE.Group();
-    const skinMat = new THREE.MeshStandardMaterial({ color: 0xb47b56, roughness: 0.7 });
-    const shirtMat = new THREE.MeshStandardMaterial({ color: shirtHex, roughness: 0.75 });
-    const shortsMat = new THREE.MeshStandardMaterial({ color: shortsHex, roughness: 0.8 });
-    const capMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.6 });
+    const material = (color, roughness = 0.76, metalness = 0) => new THREE.MeshStandardMaterial({
+      color,
+      roughness,
+      metalness
+    });
+    const skinMat = material(look.skinColor, 0.82);
+    const shirtMat = material(look.shirtColor, 0.8);
+    const shortsMat = material(look.shortsColor, 0.84);
+    const pantsMat = material(look.pantsColor || look.shortsColor, 0.9);
+    const hairMat = material(look.hairColor, 0.92);
+    const shoeMat = material(look.shoeColor, 0.58);
+    const soleMat = material(look.soleColor || 0xf1f5f9, 0.78);
+    const darkMat = material(0x171717, 0.82);
+    const detailMat = material(look.detailColor || 0xd1d5db, 0.5, 0.18);
+    const metalMat = material(look.metalColor || 0xd1d5db, 0.28, 0.72);
+    const whiteMat = material(0xf8fafc, 0.55);
+    const inkMat = material(look.tattooColor || 0x34303a, 0.95);
 
-    // Legs
-    const legGeo = new THREE.CylinderGeometry(0.08, 0.07, 0.78, 8);
-    const leftLeg = new THREE.Mesh(legGeo, shortsMat);
-    leftLeg.position.set(-0.13, 0.39, 0);
-    const rightLeg = new THREE.Mesh(legGeo, shortsMat);
-    rightLeg.position.set(0.13, 0.39, 0);
-    g.add(leftLeg, rightLeg);
+    const mesh = (geometry, mat, parent = g, position = [0, 0, 0]) => {
+      const item = new THREE.Mesh(geometry, mat);
+      item.position.set(position[0], position[1], position[2]);
+      item.castShadow = true;
+      item.receiveShadow = true;
+      parent.add(item);
+      return item;
+    };
+    const box = (w, h, d, mat, parent, pos, rot = null) => {
+      const item = mesh(new THREE.BoxGeometry(w, h, d), mat, parent, pos);
+      if (rot) item.rotation.set(rot[0], rot[1], rot[2]);
+      return item;
+    };
 
-    // Torso
-    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.62, 0.24), shirtMat);
-    torso.position.set(0, 1.08, 0);
-    torso.castShadow = true;
-    g.add(torso);
+    const bodyWidth = look.bodyType === 'stocky' ? 1.12 : look.bodyType === 'slim' ? 0.9 : 1;
+    const body = mesh(
+      new THREE.BoxGeometry(0.51 * bodyWidth, look.shirtStyle === 'oversized' ? 0.66 : 0.6, 0.3),
+      shirtMat,
+      g,
+      [0, 1.12, 0]
+    );
+    body.scale.y = 1;
+    const hem = box(0.515 * bodyWidth, 0.035, 0.305, darkMat, g, [0, 0.79, 0]);
+    hem.material = shirtMat;
 
-    // Head + Cap tilted up looking at the sky
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 12, 10), skinMat);
-    head.position.set(0, 1.54, 0);
-    g.add(head);
+    // Collar, shoulder seams and a small original kite mark on the chest.
+    const collar = mesh(new THREE.TorusGeometry(0.088, 0.012, 5, 18), darkMat, g, [0, 1.425, -0.012]);
+    collar.rotation.x = Math.PI / 2;
+    const chestMark = mesh(new THREE.OctahedronGeometry(0.065, 0), whiteMat, g, [0.095, 1.2, -0.157]);
+    chestMark.scale.set(0.75, 1.15, 0.28);
+    const chestMarkAccent = box(0.014, 0.085, 0.012, material(0xfacc15, 0.65), g, [0.095, 1.2, -0.176], [0, 0, 0.3]);
+    if (look.shirtStyle === 'sports') {
+      box(0.035, 0.48, 0.012, detailMat, g, [-0.17, 1.12, -0.158]);
+      box(0.035, 0.48, 0.012, detailMat, g, [0.17, 1.12, -0.158]);
+    } else if (look.shirtStyle === 'polo') {
+      box(0.11, 0.09, 0.018, detailMat, g, [0, 1.39, -0.162]);
+    } else if (look.shirtStyle === 'hoodie') {
+      const hood = mesh(new THREE.SphereGeometry(0.16, 10, 8), shirtMat, g, [0, 1.43, 0.09]);
+      hood.scale.set(0.9, 0.86, 0.62);
+      box(0.018, 0.25, 0.015, detailMat, g, [0, 1.13, -0.164]);
+    }
 
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.155, 0.155, 0.1, 12), capMat);
-    cap.position.set(0, 1.61, 0);
-    g.add(cap);
-    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.025, 0.18), capMat);
-    visor.position.set(0, 1.59, -0.14);
-    g.add(visor);
+    // Neck and shaped head.
+    mesh(new THREE.CylinderGeometry(0.075, 0.085, 0.17, 10), skinMat, g, [0, 1.48, 0]);
+    const head = mesh(new THREE.SphereGeometry(0.16, 16, 12), skinMat, g, [0, 1.65, 0]);
+    head.scale.set(0.98, look.ageGroup === 'older' ? 1.12 : 1.08, 0.94);
 
-    // Raised arms holding line/carretilha
-    const armGeo = new THREE.CylinderGeometry(0.055, 0.05, 0.56, 7);
-    const leftArm = new THREE.Mesh(armGeo, skinMat);
-    leftArm.position.set(-0.26, 1.25, -0.18);
-    leftArm.rotation.set(0.85, 0, -0.2);
-    const rightArm = new THREE.Mesh(armGeo, skinMat);
-    rightArm.position.set(0.26, 1.32, -0.22);
-    rightArm.rotation.set(1.05, 0, 0.22);
-    g.add(leftArm, rightArm);
-    g.userData.walkParts = { leftLeg, rightLeg, leftArm, rightArm };
+    // Ears and face details face the -Z side of the character.
+    for (const side of [-1, 1]) {
+      const ear = mesh(new THREE.SphereGeometry(0.035, 8, 7), skinMat, g, [side * 0.15, 1.65, -0.005]);
+      ear.scale.set(0.65, 1.05, 0.7);
+      mesh(new THREE.SphereGeometry(0.018, 7, 6), darkMat, g, [side * 0.064, 1.665, -0.145]);
+      box(0.065, 0.012, 0.012, hairMat, g, [side * 0.064, 1.705, -0.151], [0, 0, side * -0.08]);
+    }
+    mesh(new THREE.SphereGeometry(0.024, 8, 7), skinMat, g, [0, 1.61, -0.153]);
+    box(0.052, 0.009, 0.012, darkMat, g, [0, 1.575, -0.151]);
+    if (look.ageGroup === 'older') {
+      for (const side of [-1, 1]) {
+        box(0.043, 0.006, 0.008, inkMat, g, [side * 0.077, 1.625, -0.148]);
+      }
+    }
 
+    // Hair cuts are deliberately varied rather than recoloring one repeated mesh.
+    if (look.hairStyle === 'afro') {
+      const afro = mesh(new THREE.SphereGeometry(0.205, 13, 10), hairMat, g, [0, 1.76, 0.005]);
+      afro.scale.set(1.04, 0.88, 1.02);
+    } else if (look.hairStyle === 'cap') {
+      mesh(new THREE.CylinderGeometry(0.155, 0.16, 0.105, 12), hairMat, g, [0, 1.775, 0]);
+      box(0.24, 0.025, 0.16, hairMat, g, [0, 1.735, -0.13]);
+    } else if (look.hairStyle !== 'bald') {
+      const capHeight = look.hairStyle === 'buzz' ? 0.38 : 0.56;
+      const hairCap = mesh(
+        new THREE.SphereGeometry(0.17, 14, 9, 0, Math.PI * 2, 0, Math.PI * capHeight),
+        hairMat,
+        g,
+        [0, 1.755, 0]
+      );
+      hairCap.scale.set(1.04, 1, 1.02);
+      if (look.hairStyle === 'curlyFade' || look.hairStyle === 'waves') {
+        const curlGeo = new THREE.SphereGeometry(0.038, 7, 6);
+        const curls = look.hairStyle === 'curlyFade'
+          ? [[-0.105,1.77,-0.005],[-0.055,1.81,-0.025],[0,1.82,-0.025],[0.06,1.81,-0.018],[0.11,1.77,-0.005],[-0.08,1.82,0.05],[0.035,1.83,0.05],[0.1,1.81,0.06]]
+          : [[-0.1,1.79,0],[-0.04,1.81,-0.02],[0.04,1.81,-0.02],[0.1,1.79,0]];
+        curls.forEach((p) => mesh(curlGeo, hairMat, g, p));
+      }
+      if (look.hairStyle === 'curlyFade') {
+        box(0.013, 0.075, 0.01, detailMat, g, [0.145, 1.68, -0.04], [0, 0, -0.15]);
+      }
+    }
+
+    if (look.beardStyle && look.beardStyle !== 'none') {
+      const beardMat = material(look.beardStyle === 'gray' ? 0x929292 : look.hairColor, 0.95);
+      const beard = mesh(new THREE.SphereGeometry(0.105, 10, 8), beardMat, g, [0, 1.535, -0.05]);
+      beard.scale.set(1.05, 0.58, 0.92);
+    }
+    if (look.accessory === 'glasses') {
+      for (const side of [-1, 1]) {
+        const lens = mesh(new THREE.TorusGeometry(0.045, 0.006, 4, 12), darkMat, g, [side * 0.058, 1.665, -0.16]);
+        lens.scale.y = 0.76;
+      }
+      box(0.055, 0.008, 0.008, darkMat, g, [0, 1.665, -0.16]);
+    }
+
+    // Cargo shorts, jeans or track pants change the silhouette below the shirt.
+    const shorts = mesh(
+      new THREE.BoxGeometry(0.49 * bodyWidth, look.pantsStyle === 'cargoShorts' ? 0.31 : 0.19, 0.32),
+      look.pantsStyle === 'cargoShorts' || look.pantsStyle === 'denimShorts' ? shortsMat : pantsMat,
+      g,
+      [0, 0.77, 0]
+    );
+    if (look.pantsStyle === 'cargoShorts') {
+      for (const side of [-1, 1]) {
+        box(0.12, 0.13, 0.018, detailMat, g, [side * 0.19, 0.76, -0.17]);
+        box(0.13, 0.07, 0.025, shortsMat, g, [side * 0.19, 0.82, -0.183]);
+      }
+      if (look.shortsPattern === 'urbanCamo') {
+        const camoColors = [0x3f4142, 0x66686a, 0x17191b, 0x858585];
+        camoColors.forEach((color, i) => {
+          const patch = box(0.09, 0.07, 0.012, material(color, 0.95), g,
+            [-0.17 + (i % 2) * 0.19, 0.72 + Math.floor(i / 2) * 0.11, -0.177],
+            [0, 0, (i % 2 ? -0.22 : 0.18)]);
+          patch.scale.set(1, 1, 0.4);
+        });
+      }
+    }
+
+    // Articulated hips, legs, socks and individual sneakers.
+    const legGeo = new THREE.CylinderGeometry(0.075, 0.064, 0.59, 9);
+    const sockColor = look.sockColor || 0x1f2937;
+    const sockMat = material(sockColor, 0.88);
+    const legs = [];
+    for (const side of [-1, 1]) {
+      const leg = new THREE.Group();
+      leg.position.set(side * 0.135, 0.69, 0);
+      g.add(leg);
+      mesh(legGeo, look.pantsStyle === 'cargoShorts' || look.pantsStyle === 'denimShorts' ? skinMat : pantsMat, leg, [0, -0.28, 0]);
+      if (look.pantsStyle === 'trackPants') {
+        box(0.018, 0.48, 0.012, detailMat, leg, [side * 0.071, -0.28, -0.062]);
+      }
+      const sock = mesh(new THREE.CylinderGeometry(0.069, 0.068, 0.22, 8), sockMat, leg, [0, -0.46, 0]);
+      if (look.sockStripe) box(0.13, 0.018, 0.012, detailMat, leg, [0, -0.39, -0.067]);
+      const sole = box(0.235, 0.07, 0.35, soleMat, leg, [0, -0.62, -0.035]);
+      const sneaker = box(0.22, 0.13, 0.32, shoeMat, leg, [0, -0.55, -0.035]);
+      box(0.16, 0.018, 0.02, detailMat, leg, [0, -0.54, -0.19]);
+      legs.push(leg);
+    }
+
+    // Shoulder-mounted articulated arms. NPCs walk with relaxed arms; the main
+    // pipeiro keeps a light ready-to-launch posture.
+    const armGeo = new THREE.CylinderGeometry(0.052, 0.046, 0.28, 8);
+    const forearmGeo = new THREE.CylinderGeometry(0.045, 0.04, 0.27, 8);
+    const arms = [];
+    for (const side of [-1, 1]) {
+      const arm = new THREE.Group();
+      arm.position.set(side * 0.3 * bodyWidth, 1.34, 0);
+      g.add(arm);
+      mesh(new THREE.SphereGeometry(0.074, 8, 7), shirtMat, arm, [0, -0.025, 0]);
+      mesh(armGeo, shirtMat, arm, [0, -0.15, 0]);
+      mesh(forearmGeo, skinMat, arm, [0, -0.39, -0.006]);
+      mesh(new THREE.SphereGeometry(0.052, 8, 7), skinMat, arm, [0, -0.545, -0.012]);
+      if (look.tattoo && side === -1) {
+        box(0.07, 0.014, 0.008, inkMat, arm, [0.02, -0.37, -0.045], [0, 0, -0.18]);
+        box(0.064, 0.012, 0.008, inkMat, arm, [-0.018, -0.42, -0.045], [0, 0, 0.28]);
+        box(0.052, 0.012, 0.008, inkMat, arm, [0.018, -0.46, -0.044], [0, 0, -0.1]);
+      }
+      arms.push(arm);
+    }
+
+    // Player signature accessories: silver chain/cross, ear studs and wrist watch.
+    if (look.accessory === 'chainCross' || look.accessory === 'chain' || options.player) {
+      const chain = mesh(new THREE.TorusGeometry(0.12, 0.009, 4, 24), metalMat, g, [0, 1.405, -0.105]);
+      chain.rotation.x = Math.PI / 2;
+      if (look.accessory === 'chainCross' || options.player) {
+        box(0.025, 0.105, 0.018, metalMat, g, [0, 1.27, -0.173]);
+        box(0.075, 0.023, 0.018, metalMat, g, [0, 1.292, -0.173]);
+      }
+    }
+    if (look.earrings) {
+      for (const side of [-1, 1]) {
+        mesh(new THREE.SphereGeometry(0.018, 8, 7), metalMat, g, [side * 0.167, 1.63, -0.026]);
+      }
+    }
+    if (look.watch) {
+      const watch = mesh(new THREE.TorusGeometry(0.052, 0.012, 4, 12), metalMat, arms[1], [0, -0.5, -0.01]);
+      watch.scale.set(0.95, 0.72, 1);
+    }
+    if (look.accessory === 'shoulderBag') {
+      box(0.035, 0.56, 0.035, darkMat, g, [-0.19, 1.09, -0.16], [0, 0, -0.42]);
+      box(0.19, 0.2, 0.08, darkMat, g, [0.16, 0.86, -0.17]);
+    }
+    if (look.accessory === 'cap' && look.hairStyle !== 'cap') {
+      mesh(new THREE.CylinderGeometry(0.15, 0.16, 0.095, 12), hairMat, g, [0, 1.78, 0]);
+      box(0.24, 0.022, 0.16, hairMat, g, [0, 1.74, -0.13]);
+    }
+
+    const height = look.heightScale || 1;
+    g.scale.setScalar(height);
+    g.userData.appearance = look;
+    g.userData.walkParts = {
+      leftLeg: legs[0],
+      rightLeg: legs[1],
+      leftArm: arms[0],
+      rightArm: arms[1],
+      armBaseLeft: pose === 'street' ? 0.02 : pose === 'player' ? 0.42 : 0.82,
+      armBaseRight: pose === 'street' ? -0.02 : pose === 'player' ? 0.52 : 1.02
+    };
     return g;
   }
 
@@ -597,8 +795,8 @@ export class GameWorld {
   }
 
   _addAmbientWalker(parent, x, z, shirtHex, phase = 0, radius = 1.2, speed = 0.65, mapId = 'laje') {
-    const avatar = this._createPipeiroCharacter(shirtHex, 0x1e293b);
-    avatar.scale.setScalar(0.86);
+    const avatar = this._createPipeiroCharacter(shirtHex, null, { pose: 'street' });
+    avatar.scale.multiplyScalar(0.88);
     const grouped = parent !== this.scene;
     const baseY = grouped ? -0.16 : this.getTerrainHeight(x, z);
     avatar.position.set(x, baseY, z);
@@ -921,10 +1119,18 @@ export class GameWorld {
     // Moradores circulam pela rua e deixam a vizinhança menos estática.
     const streetPeople = [
       [-17, 4, 0x22c55e], [19, 6, 0xf97316], [-40, -25, 0x38bdf8],
-      [39, -31, 0xe879f9], [2, -45, 0xfacc15]
+      [39, -31, 0xe879f9], [2, -45, 0xfacc15], [-21, -24, 0x0f766e],
+      [24, -34, 0xf8fafc], [-21, -57, 0x7c3aed], [24, -68, 0xdc2626],
+      [-21, -84, 0x0e7490], [24, -96, 0x854d0e], [7, -12, 0x475569]
     ];
     streetPeople.forEach(([x, z, shirt], index) => {
-      this._addAmbientWalker(this.scene, x, z, shirt, index * 1.17, 1.15 + (index % 2) * 0.45, 0.48 + (index % 3) * 0.09, 'laje');
+      this._addAmbientWalker(
+        this.scene, x, z, shirt,
+        index * 1.17,
+        1.05 + (index % 3) * 0.28,
+        0.42 + (index % 4) * 0.075,
+        'laje'
+      );
     });
 
     const makeCar = (paintHex, startX, speed, roadZ) => {
@@ -1145,8 +1351,8 @@ export class GameWorld {
       if (parts) {
         parts.leftLeg.rotation.x = stride * 0.3;
         parts.rightLeg.rotation.x = -stride * 0.3;
-        parts.leftArm.rotation.x = 0.85 - stride * 0.08;
-        parts.rightArm.rotation.x = 1.05 + stride * 0.08;
+        parts.leftArm.rotation.x = (parts.armBaseLeft ?? 0) - stride * 0.15;
+        parts.rightArm.rotation.x = (parts.armBaseRight ?? 0) + stride * 0.15;
       }
     }
 

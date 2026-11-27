@@ -638,8 +638,8 @@ class Pipa3DGame {
       const swing = moving ? Math.sin(this.elapsedTime * 11) * 0.55 : 0;
       parts.leftLeg.rotation.x = swing;
       parts.rightLeg.rotation.x = -swing;
-      parts.leftArm.rotation.x = 0.85 - swing * 0.32;
-      parts.rightArm.rotation.x = 1.05 + swing * 0.32;
+      parts.leftArm.rotation.x = (parts.armBaseLeft ?? 0.42) - swing * 0.22;
+      parts.rightArm.rotation.x = (parts.armBaseRight ?? 0.52) + swing * 0.22;
       const tapAge = this.elapsedTime - this.lastLaunchTapAt;
       if (this.playerKiteInHand && tapAge >= 0 && tapAge < 0.28) {
         parts.rightArm.rotation.x = 0.1 + Math.sin((tapAge / 0.28) * Math.PI) * 1.25;
