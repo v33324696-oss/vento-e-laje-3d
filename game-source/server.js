@@ -51,6 +51,7 @@ const safeState = (state = {}) => {
     lineIntegrity: Number.isFinite(Number(state.lineIntegrity)) ? Math.max(0, Math.min(1, Number(state.lineIntegrity))) : 1,
     lineDurability: Number.isFinite(Number(state.lineDurability)) ? Math.max(0.55, Math.min(1.35, Number(state.lineDurability))) : 1,
     lineRecovery: Number.isFinite(Number(state.lineRecovery)) ? Math.max(0.1, Math.min(1.2, Number(state.lineRecovery))) : 0.45,
+    lineDischargeSafe: state.lineDischargeSafe === true,
     modelId: typeof state.modelId === 'string' ? state.modelId.slice(0, 24) : 'murcha',
     patternId: typeof state.patternId === 'string' ? state.patternId.slice(0, 32) : 'estrela_paulista',
     lineTypeId: typeof state.lineTypeId === 'string' ? state.lineTypeId.slice(0, 32) : 'branca_pura',
@@ -164,6 +165,13 @@ function updateRoomRelo(room, dt, now) {
       if (contact.distance > 1.08 || crossingQuality < 0.19 || activeMotion < 1.25) {
         const existing = room.fights.get(key);
         if (existing && now - existing.lastTouch > 420) room.fights.delete(key);
+        else if (existing) {
+          existing.integrityA = Math.min(1, existing.integrityA + a.state.lineRecovery * dt);
+          existing.integrityB = Math.min(1, existing.integrityB + b.state.lineRecovery * dt);
+          a.state.lineIntegrity = existing.integrityA;
+          b.state.lineIntegrity = existing.integrityB;
+          if (now - existing.lastTouch > 100) existing.contactSince = now;
+        }
         continue;
       }
 
@@ -183,7 +191,7 @@ function updateRoomRelo(room, dt, now) {
         largadaActive: a.state.largadaActive, largadaQuality: a.state.largadaQuality,
         linePower: a.state.linePower, ownU: contact.s, targetU: contact.t, wrapQuality,
         rearAdvantage: rearAdvantage(a, b),
-        defenderExposure: b.state.reelSpeed > 5 ? Math.max(0, Math.min(1, (b.state.reelSpeed - 5) / 22)) : 0
+        defenderExposure: b.state.reelSpeed > 5 && !b.state.lineDischargeSafe ? Math.max(0, Math.min(1, (b.state.reelSpeed - 5) / 22)) : 0
       });
       const scoreB = evaluateReloScore({
         crossingQuality, tension: b.state.tension, reelSpeed: b.state.reelSpeed,
@@ -192,12 +200,14 @@ function updateRoomRelo(room, dt, now) {
         largadaActive: b.state.largadaActive, largadaQuality: b.state.largadaQuality,
         linePower: b.state.linePower, ownU: contact.t, targetU: contact.s, wrapQuality,
         rearAdvantage: rearAdvantage(b, a),
-        defenderExposure: a.state.reelSpeed > 5 ? Math.max(0, Math.min(1, (a.state.reelSpeed - 5) / 22)) : 0
+        defenderExposure: a.state.reelSpeed > 5 && !a.state.lineDischargeSafe ? Math.max(0, Math.min(1, (a.state.reelSpeed - 5) / 22)) : 0
       });
 
       const frictionFactor = 0.38 + crossingQuality * 0.18;
       fight.integrityB -= scoreA * dt * frictionFactor / Math.max(0.55, b.state.lineDurability);
       fight.integrityA -= scoreB * dt * frictionFactor / Math.max(0.55, a.state.lineDurability);
+      a.state.lineIntegrity = Math.max(0, fight.integrityA);
+      b.state.lineIntegrity = Math.max(0, fight.integrityB);
 
       if (fight.integrityA <= 0 || fight.integrityB <= 0) {
         const aWins = fight.integrityB <= 0 && (fight.integrityA > 0 || scoreA >= scoreB);
@@ -321,7 +331,12 @@ wss.on('connection', (socket) => {
     }
 
     if (message.type === 'state' && currentRoom && currentPlayer) {
-      currentPlayer.state = safeState(message.state);
+      const nextState = safeState(message.state);
+      // The server owns combat HP; regular movement snapshots must not refill a damaged line.
+      nextState.lineIntegrity = currentPlayer.state.active === false && nextState.active
+        ? nextState.lineIntegrity
+        : currentPlayer.state.lineIntegrity;
+      currentPlayer.state = nextState;
       broadcast(currentRoom, {
         type: 'player-state',
         player: { id: currentPlayer.id, name: currentPlayer.name, state: currentPlayer.state }
