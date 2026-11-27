@@ -1760,10 +1760,11 @@ class Pipa3DGame {
         dt
       });
 
-      if (aiControls.release && !r.previousReleaseHeld) {
+      const aiDischargeHeld = !!(aiControls.release || aiControls.quickRelease);
+      if (aiDischargeHeld && !r.previousReleaseHeld) {
         r.kite.triggerLargada(r.kite.inRelo ? 0.82 : 0.12);
       }
-      r.previousReleaseHeld = !!aiControls.release;
+      r.previousReleaseHeld = aiDischargeHeld;
 
       const gY = this.world.getTerrainHeight(r.kite.position.x, r.kite.position.z) + 5.5;
       r.kite.update({
