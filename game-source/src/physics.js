@@ -605,6 +605,7 @@ export class SkyEffectsManager {
     this.scene.add(this.pointsMesh);
 
     this.fallingTails = [];
+    this.caughtRabiolas = [];
 
     // 3D Proximity / Relo Depth Indicator Ring
     const ringGeo = new THREE.RingGeometry(0.45, 0.62, 24);
@@ -654,6 +655,92 @@ export class SkyEffectsManager {
     this.fallingTails.push({ nodes, flat, line, age: 0 });
   }
 
+  spawnCaughtRabiola({
+    ownerId,
+    lineU,
+    sourceNodes,
+    capturePoint,
+    primaryColor = 0xfacc15,
+    accentColor = 0x38bdf8,
+    scale = 1
+  }) {
+    if (!Array.isArray(sourceNodes) || sourceNodes.length < 5 || !capturePoint) return null;
+
+    // Preserve the captured tail's actual shape, moving its root to the exact
+    // point where the player's flying line touched it.
+    while (this.caughtRabiolas.length >= 12) {
+      this._disposeCaughtRabiola(this.caughtRabiolas.shift());
+    }
+
+    const origin = sourceNodes[0];
+    const offset = new THREE.Vector3().subVectors(capturePoint, origin);
+    const nodes = sourceNodes.map((node) => node.clone().add(offset));
+    const previous = nodes.map((node) => node.clone());
+    const segmentLengths = [];
+    for (let i = 0; i < nodes.length - 1; i++) {
+      segmentLengths.push(Math.max(0.08, nodes[i].distanceTo(nodes[i + 1])));
+    }
+
+    const flat = new Float32Array(nodes.length * 3);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(flat, 3));
+    const lineMaterial = new THREE.LineBasicMaterial({
+      color: 0xf8fafc,
+      transparent: true,
+      opacity: 0.92
+    });
+    const line = new THREE.Line(geometry, lineMaterial);
+    line.frustumCulled = false;
+    this.scene.add(line);
+
+    const ribbonScale = THREE.MathUtils.clamp(scale, 0.65, 1.8);
+    const ribbonGeometry = new THREE.PlaneGeometry(0.34 * ribbonScale, 0.09 * ribbonScale);
+    const ribbonMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.58,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.96,
+      depthWrite: false
+    });
+    const ribbons = new THREE.InstancedMesh(ribbonGeometry, ribbonMaterial, nodes.length - 1);
+    ribbons.frustumCulled = false;
+    const mainColor = new THREE.Color(primaryColor);
+    const detailColor = new THREE.Color(accentColor);
+    for (let i = 0; i < nodes.length - 1; i++) {
+      ribbons.setColorAt(i, i % 4 === 0 ? detailColor : mainColor);
+    }
+    if (ribbons.instanceColor) ribbons.instanceColor.needsUpdate = true;
+    this.scene.add(ribbons);
+
+    const captured = {
+      ownerId,
+      lineU: THREE.MathUtils.clamp(lineU, 0, 1),
+      nodes,
+      previous,
+      segmentLengths,
+      flat,
+      line,
+      ribbons,
+      ribbonScale,
+      phase: Math.random() * Math.PI * 2,
+      detached: false,
+      detachedAge: 0
+    };
+    this.caughtRabiolas.push(captured);
+    return captured;
+  }
+
+  _disposeCaughtRabiola(captured) {
+    if (!captured) return;
+    this.scene.remove(captured.line);
+    this.scene.remove(captured.ribbons);
+    captured.line.geometry.dispose();
+    captured.line.material.dispose();
+    captured.ribbons.geometry.dispose();
+    captured.ribbons.material.dispose();
+  }
+
   updateProximityCue(cue, camera) {
     if (!cue || !cue.active) {
       this.proximityRing.visible = false;
@@ -676,7 +763,9 @@ export class SkyEffectsManager {
     }
   }
 
-  update(windVec, dt) {
+  update(windVec, dt, lineOwners = []) {
+    const ownerById = new Map(lineOwners.map((owner) => [owner.id, owner]));
+
     // Update particles
     const posArr = this.partGeo.attributes.position.array;
     const colArr = this.partGeo.attributes.color.array;
@@ -734,8 +823,122 @@ export class SkyEffectsManager {
       ft.line.geometry.attributes.position.needsUpdate = true;
       ft.line.material.opacity = Math.max(0, 0.85 * (1 - ft.age / 8.0));
     }
+
+    // Captured rabiolas stay tied to the exact point of contact on their
+    // owner's flying line, then detach and fall naturally if that kite is cut.
+    for (let i = this.caughtRabiolas.length - 1; i >= 0; i--) {
+      const captured = this.caughtRabiolas[i];
+      const owner = ownerById.get(captured.ownerId);
+      const attached = !captured.detached && owner?.active && owner.stringNodes?.length >= 2;
+      if (attached) {
+        const lineAt = captured.lineU * (owner.stringNodes.length - 1);
+        const lineIndex = Math.min(owner.stringNodes.length - 2, Math.floor(lineAt));
+        const localU = lineAt - lineIndex;
+        _caughtAttach.lerpVectors(owner.stringNodes[lineIndex], owner.stringNodes[lineIndex + 1], localU);
+        captured.nodes[0].copy(_caughtAttach);
+        captured.previous[0].copy(_caughtAttach);
+      } else {
+        captured.detached = true;
+        captured.detachedAge += dt;
+        if (captured.detachedAge > 8) {
+          this._disposeCaughtRabiola(captured);
+          this.caughtRabiolas.splice(i, 1);
+          continue;
+        }
+        const root = captured.nodes[0];
+        const rootPrev = captured.previous[0];
+        const rootVx = (root.x - rootPrev.x) * 0.94;
+        const rootVy = (root.y - rootPrev.y) * 0.94;
+        const rootVz = (root.z - rootPrev.z) * 0.94;
+        rootPrev.copy(root);
+        root.x += rootVx + windVec.x * 0.22 * dt;
+        root.y += rootVy + (-3.8 + windVec.y * 0.15) * dt;
+        root.z += rootVz + windVec.z * 0.22 * dt;
+      }
+
+      captured.phase += dt * (8.5 + windVec.length() * 0.18);
+      const count = captured.nodes.length;
+      for (let n = 1; n < count; n++) {
+        const curr = captured.nodes[n];
+        const prev = captured.previous[n];
+        const vx = (curr.x - prev.x) * 0.925;
+        const vy = (curr.y - prev.y) * 0.925;
+        const vz = (curr.z - prev.z) * 0.925;
+        prev.copy(curr);
+        const flutter = Math.sin(captured.phase - n * 0.62) * 0.075;
+        curr.x += vx + windVec.x * 0.20 * dt + flutter * dt;
+        curr.y += vy + (-1.25 + windVec.y * 0.18) * dt;
+        curr.z += vz + windVec.z * 0.20 * dt + Math.cos(captured.phase * 0.72 + n) * 0.035 * dt;
+      }
+
+      // Four constraint passes keep the captured thread continuous while
+      // each little paper ribbon can still flutter independently.
+      for (let pass = 0; pass < 4; pass++) {
+        if (attached) {
+          const lineAt = captured.lineU * (owner.stringNodes.length - 1);
+          const lineIndex = Math.min(owner.stringNodes.length - 2, Math.floor(lineAt));
+          _caughtAttach.lerpVectors(
+            owner.stringNodes[lineIndex],
+            owner.stringNodes[lineIndex + 1],
+            lineAt - lineIndex
+          );
+          captured.nodes[0].copy(_caughtAttach);
+        }
+        for (let n = 0; n < count - 1; n++) {
+          const a = captured.nodes[n];
+          const b = captured.nodes[n + 1];
+          _caughtDiff.subVectors(b, a);
+          const distance = _caughtDiff.length() || 0.0001;
+          const correction = (distance - captured.segmentLengths[n]) / distance;
+          if (attached && n === 0) {
+            b.addScaledVector(_caughtDiff, -correction);
+          } else {
+            a.addScaledVector(_caughtDiff, correction * 0.5);
+            b.addScaledVector(_caughtDiff, -correction * 0.5);
+          }
+        }
+      }
+
+      for (let n = 0; n < count; n++) {
+        const point = captured.nodes[n];
+        captured.flat[n * 3] = point.x;
+        captured.flat[n * 3 + 1] = point.y;
+        captured.flat[n * 3 + 2] = point.z;
+        if (n === 0) {
+          _caughtMatrix.makeScale(0, 0, 0);
+        } else {
+          _caughtTangent.subVectors(captured.nodes[n - 1], point).normalize();
+          _caughtQuat.setFromUnitVectors(_caughtUp, _caughtTangent);
+          _caughtTwist.setFromAxisAngle(
+            _caughtUp,
+            n * 1.1 + Math.sin(captured.phase * 0.7 + n * 0.8) * 0.85
+          );
+          _caughtQuat.multiply(_caughtTwist);
+          _caughtScale.setScalar(captured.ribbonScale);
+          _caughtMatrix.compose(point, _caughtQuat, _caughtScale);
+        }
+        captured.ribbons.setMatrixAt(n, _caughtMatrix);
+      }
+      captured.line.geometry.attributes.position.needsUpdate = true;
+      captured.line.geometry.setDrawRange(0, count);
+      captured.ribbons.instanceMatrix.needsUpdate = true;
+      if (captured.detached) {
+        const fade = Math.max(0, 1 - captured.detachedAge / 8);
+        captured.line.material.opacity = 0.92 * fade;
+        captured.ribbons.material.opacity = 0.96 * fade;
+      }
+    }
   }
 }
+
+const _caughtUp = new THREE.Vector3(0, 1, 0);
+const _caughtAttach = new THREE.Vector3();
+const _caughtDiff = new THREE.Vector3();
+const _caughtTangent = new THREE.Vector3();
+const _caughtQuat = new THREE.Quaternion();
+const _caughtTwist = new THREE.Quaternion();
+const _caughtScale = new THREE.Vector3(1, 1, 1);
+const _caughtMatrix = new THREE.Matrix4();
 
 const _worldUp = new THREE.Vector3(0, 1, 0);
 const _rad = new THREE.Vector3();
