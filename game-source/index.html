@@ -55,10 +55,11 @@
           <span id="prox-title">LINHA PRÓXIMA</span>
           <span id="prox-dist">2.4m</span>
         </div>
-        <div class="relo-meter-track">
-          <div id="relo-meter-player" class="relo-meter-fill player-fill" style="width: 50%"></div>
+        <div class="relo-hp-pair">
+          <div class="relo-hp-item"><div class="relo-hp-caption"><span>SUA LINHA</span><b id="prox-player-hp">100%</b></div><div class="relo-meter-track"><div id="relo-meter-player" class="relo-meter-fill player-fill" style="width:100%"></div></div></div>
+          <div class="relo-hp-item"><div class="relo-hp-caption"><span>LINHA RIVAL</span><b id="prox-rival-hp">100%</b></div><div class="relo-meter-track rival-track"><div id="relo-meter-rival" class="relo-meter-fill rival-fill" style="width:100%"></div></div></div>
         </div>
-        <div class="prox-hint" id="prox-hint">Sua linha pela FRENTE — Soca [Espaço] ou Descarrega [S]!</div>
+        <div class="prox-hint" id="prox-hint">Acerte o ângulo, envolva a linha e escolha a largada.</div>
       </div>
     </div>
 
@@ -232,8 +233,33 @@
       <div class="hero-pill">SIMULADOR 3D REALISTA • FÍSICA DE VENTO, CATENÁRIA &amp; RELO</div>
       <h1 class="hero-title">VENTO &amp; LAJE <span>3D</span></h1>
       <p class="hero-desc">
-        Suba na laje, gire a carretilha de madeira, sinta o estalo do papel de seda contra o sol e dispute o céu do bairro. Corte na puxada, na largada ou no cabresto — e apare pipas avoadas no alto!
+        Um novo céu de disputas: física de voo, RELO tático, salas com amigos, arenas e evolução do seu pipeiro. Monte sua pipa e conquiste seu espaço.
       </p>
+
+      <section class="career-panel">
+        <div class="career-profile">
+          <div class="career-avatar">🪁</div>
+          <div class="career-identity">
+            <label for="profile-nickname">SEU PIPEIRO</label>
+            <input id="profile-nickname" maxlength="18" value="Pipeiro" aria-label="Apelido do perfil" />
+            <strong id="profile-rank-title">Pipeiro Iniciante</strong>
+          </div>
+          <div class="career-level"><span>NÍVEL</span><strong id="profile-level">1</strong></div>
+        </div>
+        <div class="career-progress">
+          <div class="career-xp-label"><span>EXPERIÊNCIA</span><span id="profile-xp-label">0 / 220 XP</span></div>
+          <div class="career-xp-track"><div id="profile-xp-fill" class="career-xp-fill" style="width:0%"></div></div>
+          <div class="career-footer">
+            <span>🪙 <strong id="profile-coins">250</strong> moedas</span>
+            <span><strong id="profile-total-cuts">0</strong> cortes · <strong id="profile-total-catches">0</strong> aparadas</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="mission-panel">
+        <div class="mission-heading"><div><span class="section-eyebrow">OBJETIVOS DE CARREIRA</span><h2>Missões do pipeiro</h2></div><span class="mission-reset">PROGRESSO SALVO</span></div>
+        <div id="mission-list" class="mission-list"></div>
+      </section>
 
       <div class="mode-cards">
         <button class="mode-card selected" data-mode="festival">
@@ -244,7 +270,12 @@
         <button class="mode-card" data-mode="torneio">
           <div class="mc-icon">🏆</div>
           <div class="mc-title">Torneio Rei da Laje</div>
-          <div class="mc-desc">Rodadas progressivas com rajadas de vento e mestres da carretilha cada vez mais afiados.</div>
+          <div class="mc-desc">Rodadas progressivas, rivais mais inteligentes e recompensa por sequência de vitórias.</div>
+        </button>
+        <button class="mode-card" data-mode="duelo">
+          <div class="mc-icon">⚔️</div>
+          <div class="mc-title">Arena 1 contra 1</div>
+          <div class="mc-desc">Um único adversário, espaço de combate mais limpo e duelo focado em técnica.</div>
         </button>
         <button class="mode-card" data-mode="zen">
           <div class="mc-icon">🌅</div>
