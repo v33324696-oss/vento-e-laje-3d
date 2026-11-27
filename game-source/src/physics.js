@@ -489,6 +489,10 @@ export class DriftingKite {
     this.age = 0;
     this.maxAge = 24;
     this.alive = true;
+    this.snagged = false;
+    this.recovering = false;
+    this.recoveryProgress = 0;
+    this.recoveryTarget = new THREE.Vector3();
 
     // Trailing severed string (~14m hanging from bridle so players can "aparar/laçar" it!)
     this.trailCount = 10;
@@ -515,31 +519,41 @@ export class DriftingKite {
   update(windVec, sunDir, cameraPos, dt) {
     if (!this.alive) return;
     this.age += dt;
-    if (this.age > this.maxAge || this.position.y < 1.5) {
+    if (!this.snagged && !this.recovering && (this.age > this.maxAge || this.position.y < 1.5)) {
       this.alive = false;
       return;
     }
 
-    this.tumblePhase += dt * 3.1;
-    // Unattached kite floats downwind, bobbing & gliding laterally ("boiando no vento")
-    this.velocity.x = windVec.x * 0.88 + Math.sin(this.tumblePhase) * 3.6;
-    this.velocity.y = -1.65 + Math.cos(this.tumblePhase * 1.7) * 1.15;
-    this.velocity.z = windVec.z * 0.88;
+    // A caught rabiola holds the loose kite in place while the pipeiro works
+    // the knot. It is not awarded or attached to the player's line here.
+    if (this.snagged) return;
 
-    this.position.addScaledVector(this.velocity, dt);
+    this.tumblePhase += dt * (this.recovering ? 1.45 : 3.1);
+    if (this.recovering) {
+      // The kite is hauled down only while the player holds the reel control.
+      _tmpSub.subVectors(this.recoveryTarget, this.position);
+      this.velocity.copy(_tmpSub).multiplyScalar(1.7);
+      this.position.addScaledVector(this.velocity, dt);
+    } else {
+      // Unattached kite floats downwind, bobbing & gliding laterally ("boiando no vento")
+      this.velocity.x = windVec.x * 0.88 + Math.sin(this.tumblePhase) * 3.6;
+      this.velocity.y = -1.65 + Math.cos(this.tumblePhase * 1.7) * 1.15;
+      this.velocity.z = windVec.z * 0.88;
+      this.position.addScaledVector(this.velocity, dt);
+    }
 
-    // Gentle fluttering pitch/bank as it floats away
+    // Gentle fluttering pitch/bank as it floats away or is being recovered
     _euler.set(
-      0.85 + Math.sin(this.tumblePhase * 1.3) * 0.35,
-      Math.sin(this.tumblePhase * 0.6) * 0.6,
-      this.tumblePhase * 0.9
+      (this.recovering ? 0.42 : 0.85) + Math.sin(this.tumblePhase * 1.3) * (this.recovering ? 0.12 : 0.35),
+      Math.sin(this.tumblePhase * 0.6) * (this.recovering ? 0.22 : 0.6),
+      this.tumblePhase * (this.recovering ? 0.35 : 0.9)
     );
     this.quaternion.setFromEuler(_euler);
 
     this.visual.update({
       position: this.position,
       quaternion: this.quaternion,
-      aeroLoad: 0.15,
+      aeroLoad: this.recovering ? 0.28 : 0.15,
       windVec,
       sunDir,
       cameraPos,
