@@ -99,6 +99,10 @@ export class KiteEntity {
     this.disqueBoost = 0;
     this.disqueDir = 0;
     this.disqueCooldown = 0;
+    this.disbicarBoost = 0;
+    this.disbicarDir = 1;
+    this.disbicarCooldown = 0;
+    this.reloContactTime = 0;
     this.tailCutCooldown = 0;
     this.largadaBoost = 0;
     this.largadaQuality = 0;
@@ -151,6 +155,9 @@ export class KiteEntity {
     this.largadaCooldown = 0;
     this.largadaTagTimer = 0;
     this.disqueBoost = 0;
+    this.disbicarBoost = 0;
+    this.disbicarCooldown = 0;
+    this.reloContactTime = 0;
     this.noseAngle = (Math.random() - 0.5) * 0.35;
     this.angularVel = 0;
     this.velocity.set(0, 0, 0);
@@ -197,6 +204,17 @@ export class KiteEntity {
     this.disqueBoost = 1.0;
     this.disqueCooldown = 0.62;
     this.tension = 1.0;
+  }
+
+  triggerDisbicar(dir = 1) {
+    if (!this.active || this.disbicarCooldown > 0) return false;
+    this.disbicarDir = Math.sign(dir) || 1;
+    this.disbicarBoost = 1.0;
+    this.disbicarCooldown = 0.48;
+    this.tension = Math.min(1, this.tension + 0.38);
+    this.lineLength = Math.max(this.minLine, this.lineLength - 0.85);
+    this.angularVel += this.disbicarDir * 3.1;
+    return true;
   }
 
   _computeTangentFrame(outRadial, outRight, outUp) {
@@ -284,7 +302,7 @@ export class KiteEntity {
   }
 
   update({
-    controls = { pull: false, release: false, steer: 0 },
+    controls = { pull: false, release: false, quickRelease: false, steer: 0 }, 
     windVec,
     sunDir,
     cameraPos,
@@ -301,7 +319,9 @@ export class KiteEntity {
 
     this.socadaBoost *= Math.pow(0.018, stepDt);
     this.disqueBoost *= Math.pow(0.012, stepDt);
+    this.disbicarBoost *= Math.pow(0.035, stepDt);
     if (this.disqueCooldown > 0) this.disqueCooldown = Math.max(0, this.disqueCooldown - stepDt);
+    if (this.disbicarCooldown > 0) this.disbicarCooldown = Math.max(0, this.disbicarCooldown - stepDt);
     if (this.largadaCooldown > 0) this.largadaCooldown = Math.max(0, this.largadaCooldown - stepDt);
     if (this.largadaBoost > 0) this.largadaBoost = Math.max(0, this.largadaBoost - stepDt);
     if (this.largadaTagTimer > 0) this.largadaTagTimer = Math.max(0, this.largadaTagTimer - stepDt);
@@ -315,13 +335,17 @@ export class KiteEntity {
       this.reelSpeed = -15.5 * spec.speedMult;
       this.lineLength = Math.max(this.minLine, this.lineLength + this.reelSpeed * stepDt);
       targetTension = 0.90;
-    } else if (controls.release) {
-      this.reelSpeed = 16.5;
+    } else if (controls.quickRelease) {
+      this.reelSpeed = 29.0;
       this.lineLength = Math.min(this.maxLine, this.lineLength + this.reelSpeed * stepDt);
-      targetTension = 0.14;
+      targetTension = 0.055;
+    } else if (controls.release) {
+      this.reelSpeed = 8.2;
+      this.lineLength = Math.min(this.maxLine, this.lineLength + this.reelSpeed * stepDt);
+      targetTension = 0.24;
     }
 
-    targetTension = Math.min(1.0, targetTension + this.socadaBoost * 0.55 + this.disqueBoost * 0.55);
+    targetTension = Math.min(1.0, targetTension + this.socadaBoost * 0.55 + this.disqueBoost * 0.55 + this.disbicarBoost * 0.32);
     this.tension += (targetTension - this.tension) * Math.min(1, stepDt * 10);
 
     // 2. Nose Rotation ("Giro do bico" on slack vs Steering vs Rabiola Stabilization)
@@ -331,10 +355,10 @@ export class KiteEntity {
     if (Math.abs(steer) > 0.04) {
       const turnRate = 3.65 * spec.turnMult * rabicoWildness;
       this.angularVel += (steer * turnRate - this.angularVel) * Math.min(1, stepDt * 14);
-    } else if (controls.release && this.socadaBoost < 0.15) {
-      // Authentic slack spin ("rodopiando enquanto dá linha")!
-      const spinTarget = spec.spinRate * rabicoWildness;
-      this.angularVel += (spinTarget - this.angularVel) * Math.min(1, stepDt * 7);
+    } else if ((controls.release || controls.quickRelease) && this.socadaBoost < 0.15) {
+      // Soft discharge steers a controlled turn; rapid discharge creates a wider, faster escape arc.
+      const spinTarget = spec.spinRate * rabicoWildness * (controls.quickRelease ? 1.42 : 0.82);
+      this.angularVel += (spinTarget - this.angularVel) * Math.min(1, stepDt * (controls.quickRelease ? 10 : 7));
     } else {
       // Pendulum restoring torque from the rabiola gently rights the kite when idle
       const pendulumRestore = -Math.sin(this.noseAngle) * 2.15 * tailRatio;
@@ -356,9 +380,9 @@ export class KiteEntity {
     const windSpeed = windVec.length();
 
     // Forward aerodynamic drive along nose direction (strong when pulling, steering or socando!)
-    const activeInput = (controls.pull ? 1.0 : 0.0) + Math.abs(steer) * 0.65;
+    const activeInput = (controls.pull ? 1.0 : 0.0) + Math.abs(steer) * 0.65 + this.disbicarBoost * 0.75;
     const forwardDrive =
-      (1.35 + activeInput * 9.8 + this.socadaBoost * 25.5) *
+      (1.35 + activeInput * 9.8 + this.socadaBoost * 25.5 + this.disbicarBoost * 8.5) *
       spec.speedMult *
       (windSpeed / 9.0);
 
@@ -367,6 +391,11 @@ export class KiteEntity {
     // Disque lateral whip slash
     if (this.disqueBoost > 0.05) {
       _DesiredVel.addScaledVector(_tRight, this.disqueDir * this.disqueBoost * 25.0 * spec.speedMult);
+    }
+    // Disbicar is a sharp pull-and-steer impulse, distinct from the lateral disque.
+    if (this.disbicarBoost > 0.05) {
+      _DesiredVel.addScaledVector(_tRight, this.disbicarDir * this.disbicarBoost * 13.5 * spec.speedMult);
+      _DesiredVel.addScaledVector(_noseDir, this.disbicarBoost * 7.0 * spec.speedMult);
     }
 
     // Wind drift & natural equilibrium elevation (~28-38 deg) vs gravity
