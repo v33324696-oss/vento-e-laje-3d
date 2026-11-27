@@ -146,6 +146,8 @@ function rearAdvantage(attacker, defender) {
 
 function updateRoomRelo(room, dt, now) {
   const players = [...room.players.values()].filter((player) => player.state?.active !== false);
+  const engagedIds = new Set();
+  const recoveredIds = new Set();
   for (let i = 0; i < players.length; i++) {
     for (let j = i + 1; j < players.length; j++) {
       const a = players[i], b = players[j];
@@ -170,11 +172,15 @@ function updateRoomRelo(room, dt, now) {
           existing.integrityB = Math.min(1, existing.integrityB + b.state.lineRecovery * dt);
           a.state.lineIntegrity = existing.integrityA;
           b.state.lineIntegrity = existing.integrityB;
+          recoveredIds.add(a.id);
+          recoveredIds.add(b.id);
           if (now - existing.lastTouch > 100) existing.contactSince = now;
         }
         continue;
       }
 
+      engagedIds.add(a.id);
+      engagedIds.add(b.id);
       let fight = room.fights.get(key);
       if (!fight) {
         fight = { integrityA: a.state.lineIntegrity, integrityB: b.state.lineIntegrity, lastTouch: now, contactSince: now };
@@ -228,6 +234,12 @@ function updateRoomRelo(room, dt, now) {
         room.cooldowns.set(key, now + 2800);
         broadcast(room, result);
       }
+    }
+  }
+  // Restore line HP when a player is not rubbing against another line.
+  for (const player of players) {
+    if (!engagedIds.has(player.id) && !recoveredIds.has(player.id)) {
+      player.state.lineIntegrity = Math.min(1, player.state.lineIntegrity + player.state.lineRecovery * dt);
     }
   }
   for (const [key, until] of room.cooldowns) if (until <= now) room.cooldowns.delete(key);
