@@ -57,7 +57,7 @@ test('rabiola mass and airflow change its motion profile', () => {
 
 test('holding the reel progressively pulls a kite toward its anchor', () => {
   const firstFrame = calculateWinchResponse(0, -7.2, 1 / 60, { pullResponse: 4.8 });
-  const settled = calculateWinchResponse(-6.8, -7.2, 1 / 60, { pullResponse: 4.8 });
+  const settled = calculateWinchResponse(-6.0, -7.2, 1 / 60, { pullResponse: 4.8 });
   assert.ok(firstFrame.velocityChange < 0);
   assert.ok(settled.velocityChange < 0);
   assert.ok(Math.abs(settled.velocityChange) < Math.abs(firstFrame.velocityChange));
