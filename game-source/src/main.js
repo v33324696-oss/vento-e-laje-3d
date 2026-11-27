@@ -93,6 +93,8 @@ class Pipa3DGame {
     this.onlineRoster = [];
     this.flightSaveAccumulator = 0;
     this.tutorialIndex = 0;
+    this.lastPingAt = 0;
+    this.onlinePingMs = null;
 
     // Wind state
     this.windVec = new THREE.Vector3(0, 0.4, -9.5);
@@ -786,7 +788,16 @@ class Pipa3DGame {
   }
 
   _handleNetworkMessage(message) {
+    if (message.type === 'pong') {
+      this.onlinePingMs = Number.isFinite(message.latencyMs) ? Math.round(message.latencyMs) : null;
+      const ping = document.getElementById('online-ping');
+      if (ping) ping.textContent = this.onlinePingMs === null ? 'PING --' : `PING ${this.onlinePingMs} ms`;
+      return;
+    }
     if (message.type === 'joined') {
+      this.onlinePingMs = null;
+      const ping = document.getElementById('online-ping');
+      if (ping) ping.textContent = 'PING ...';
       this.onlineRoomCode = message.roomCode;
       document.getElementById('online-room-code').textContent = message.roomCode;
       document.getElementById('online-room').value = message.roomCode;
@@ -2906,6 +2917,10 @@ class Pipa3DGame {
     }
     this.elapsedTime += dt;
     const elapsed = this.elapsedTime;
+    if (this.multiplayer?.connected && nowMs - this.lastPingAt >= 3000) {
+      this.lastPingAt = nowMs;
+      this.multiplayer.sendPing();
+    }
 
     try {
       this._updateNeighborhoodEvents(dt);

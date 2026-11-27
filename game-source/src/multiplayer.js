@@ -53,6 +53,10 @@ export class MultiplayerClient {
       socket.addEventListener('message', (event) => {
         let data;
         try { data = JSON.parse(event.data); } catch { return; }
+        if (data.type === 'pong') {
+          const sentAt = Number(data.sentAt);
+          data.latencyMs = Number.isFinite(sentAt) ? Math.max(0, performance.now() - sentAt) : null;
+        }
         if (data.type === 'joined') {
           this.connected = true;
           this.playerId = data.playerId;
@@ -84,6 +88,12 @@ export class MultiplayerClient {
   sendState(state) {
     if (!this.connected || !this.socket || this.socket.readyState !== WebSocket.OPEN) return;
     this.socket.send(JSON.stringify({ type: 'state', state }));
+  }
+
+  sendPing() {
+    if (!this.connected || !this.socket || this.socket.readyState !== WebSocket.OPEN) return false;
+    this.socket.send(JSON.stringify({ type: 'ping', sentAt: performance.now() }));
+    return true;
   }
 
   sendChat(text) {

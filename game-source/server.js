@@ -310,6 +310,12 @@ wss.on('connection', (socket) => {
     try { message = JSON.parse(raw.toString()); } catch { return; }
     if (!message || typeof message.type !== 'string') return;
 
+    if (message.type === 'ping') {
+      const sentAt = Number(message.sentAt);
+      send(socket, { type: 'pong', sentAt: Number.isFinite(sentAt) ? sentAt : null });
+      return;
+    }
+
     if (message.type === 'join') {
       if (currentRoom) return;
       let code = String(message.room || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);

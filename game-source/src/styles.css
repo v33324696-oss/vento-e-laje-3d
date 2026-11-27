@@ -1727,3 +1727,6 @@ button { touch-action: manipulation; }
   .tutorial-card p { font-size:12px; }
   .tutorial-actions .secondary-cta,.tutorial-actions .primary-cta { padding:8px 9px; font-size:9px; }
 }
+
+
+.online-ping { display:inline-flex; align-items:center; color:#86efac; font-size:10px; font-weight:900; letter-spacing:.06em; }
