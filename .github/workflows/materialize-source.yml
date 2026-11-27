@@ -1,0 +1,36 @@
+name: Materialize game source for editing
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/materialize-source.yml"
+permissions:
+  contents: write
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Rebuild and unpack the source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat source.part.* | base64 -d > /tmp/vento-source.tar.gz
+          echo "Archive entries:"
+          tar -tzf /tmp/vento-source.tar.gz | head -120
+          mkdir -p game-source
+          tar -xzf /tmp/vento-source.tar.gz -C game-source
+          echo "Extracted files:"
+          find game-source -maxdepth 4 -type f | sort | head -160
+          test -n "$(find game-source -type f -name '*.js' -o -name '*.ts' -o -name '*.tsx' -o -name '*.jsx' | head -1)"
+      - name: Commit extracted source for safe editing
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game-source
+          git commit -m "Expose editable game source files"
+          git push origin main
