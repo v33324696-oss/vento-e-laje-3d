@@ -10,7 +10,8 @@ export function evaluateReloScore({
   crossingQuality = 0, tension = 0.5, reelSpeed = 0, kiteSpeed = 0,
   relativeSpeed = 0, socada = 0, disque = 0, largadaActive = false,
   largadaQuality = 0, linePower = 1, ownU = 0.5, targetU = 0.5,
-  wrapQuality = 0, windAlignment = 0.75
+  wrapQuality = 0, windAlignment = 0.75, disbicar = 0,
+  rearAdvantage = 0, defenderExposure = 0
 } = {}) {
   const cross = unit(crossingQuality);
   const tight = unit(tension);
@@ -23,8 +24,11 @@ export function evaluateReloScore({
   const tensionFactor = 0.68 + 0.32 * unit(1 - Math.abs(tight - 0.70) / 0.70);
   const motion = 0.76 + Math.min(0.42,
     (Math.abs(reelSpeed) * 0.34 + kiteSpeed * 0.16 + relativeSpeed * 0.24) / 38);
-  const maneuver = 1 + Math.min(0.30, Math.max(0, socada) * 0.13 + Math.max(0, disque) * 0.13);
+  const maneuver = 1 + Math.min(0.46,
+    Math.max(0, socada) * 0.13 + Math.max(0, disque) * 0.13 + unit(disbicar) * 0.18);
   const wind = 0.78 + unit(windAlignment) * 0.30;
+  const position = 1 + unit(rearAdvantage) * 0.18;
+  const exposure = 1 + unit(defenderExposure) * 0.58;
 
   // Contact near the kite-end is a vulnerable game zone; a poor entry is punished.
   let entry = 1;
@@ -43,7 +47,7 @@ export function evaluateReloScore({
   }
 
   return clamp(clamp(linePower, 0.5, 1.35) * angle * wrapFactor *
-    tensionFactor * motion * maneuver * wind * entry * release, 0.08, 2.8);
+    tensionFactor * motion * maneuver * wind * position * exposure * entry * release, 0.08, 3.2);
 }
 
 export function getCrossingQuality(a, b) {
