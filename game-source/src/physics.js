@@ -5,8 +5,9 @@ import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { KiteVisual } from './kiteMesh.js';
 import { LINE_TYPES } from './carretilha.js';
 import { evaluateReloScore } from './relo.js';
-import { getKiteAeroProfile, getWindPhase, sampleWindAt } from './kiteAerodynamics.js';
+import { bankSpanForSteering, getKiteAeroProfile, getWindPhase, sampleWindAt } from './kiteAerodynamics.js';
 import { getKiteMaterialProfile } from './kiteMaterials.js';
+import { stepKiteSteering } from './kiteSteering.js';
 
 export const STRING_SEGMENTS = 28;
 
@@ -367,29 +368,31 @@ export class KiteEntity {
     );
     this.tension += (targetTension - this.tension) * Math.min(1, stepDt * 10);
 
-    // 2. Classic nose rotation: direct steering with natural rabiola recovery.
+    // 2. Predictable steering: a held A/D input settles at a chosen bank
+    // angle instead of accelerating into continuous full rotations.
     const steer = THREE.MathUtils.clamp(controls.steer || 0, -1, 1);
     const material = this.materialProfile || getKiteMaterialProfile();
     const rabicoWildness = (1.0 + (1.0 - tailRatio) * 1.15)
       * (1.04 - aeroProfile.stability * 0.04)
       * (1.15 - material.stabilityMultiplier * 0.15);
-
-    if (Math.abs(steer) > 0.04) {
-      const turnRate = 3.65 * spec.turnMult * material.steeringMultiplier * rabicoWildness;
-      this.angularVel += (steer * turnRate - this.angularVel) * Math.min(1, stepDt * 14);
-    } else if ((controls.release || controls.quickRelease) && this.socadaBoost < 0.15) {
-      const spinTarget = spec.spinRate * material.steeringMultiplier * rabicoWildness * (controls.quickRelease ? 1.42 : 0.82);
-      this.angularVel += (spinTarget - this.angularVel)
-        * Math.min(1, stepDt * (controls.quickRelease ? 10 : 7));
-    } else {
-      const pendulumRestore = -Math.sin(this.noseAngle) * 2.15 * tailRatio;
-      const rabicoSpin = tailRatio < 0.45 ? (0.45 - tailRatio) * 3.8 : 0;
-      this.angularVel += (pendulumRestore + rabicoSpin - this.angularVel) * Math.min(1, stepDt * 6);
-    }
-
-    this.noseAngle += this.angularVel * stepDt;
-    if (this.noseAngle > Math.PI) this.noseAngle -= Math.PI * 2;
-    if (this.noseAngle < -Math.PI) this.noseAngle += Math.PI * 2;
+    const turnScale = THREE.MathUtils.clamp(
+      spec.turnMult * material.steeringMultiplier * rabicoWildness,
+      0.82,
+      1.22
+    );
+    const spinTarget = (controls.release || controls.quickRelease) && this.socadaBoost < 0.15
+      ? spec.spinRate * material.steeringMultiplier * rabicoWildness * (controls.quickRelease ? 1.42 : 0.82)
+      : 0;
+    const steeringState = stepKiteSteering({
+      noseAngle: this.noseAngle,
+      angularVelocity: this.angularVel,
+      steer,
+      dt: stepDt,
+      maxAngle: 0.76 * turnScale,
+      spinRate: spinTarget
+    });
+    this.noseAngle = steeringState.noseAngle;
+    this.angularVel = steeringState.angularVelocity;
 
     // 3. Original target-velocity flight model.
     sampleWindAt(windVec, this.position, time, this.windPhase, this.localWind);
@@ -414,6 +417,16 @@ export class KiteEntity {
 
     _DesiredVel.copy(_noseDir).multiplyScalar(forwardDrive);
 
+    // Bank the wing in the local airflow so steering changes the actual
+    // aerodynamic lift direction, not only the kite's visual nose rotation.
+    _airRelative.copy(flightWind).sub(this.velocity);
+    if (Math.abs(steer) > 0.025 && _airRelative.lengthSq() > 0.04) {
+      bankSpanForSteering(_tRight, _airRelative, steer * 0.66, _bankedSpan);
+      _bankLiftDirection.crossVectors(_bankedSpan, _airRelative).normalize();
+      const bankLift = Math.min(2.8, windSpeed * 0.24) * Math.abs(steer);
+      _DesiredVel.addScaledVector(_bankLiftDirection, bankLift);
+    }
+
     if (this.disqueBoost > 0.05) {
       _DesiredVel.addScaledVector(_tRight, this.disqueDir * this.disqueBoost * 25.0 * spec.speedMult);
     }
@@ -431,9 +444,16 @@ export class KiteEntity {
       0.90,
       1.12
     );
-    const netVertical =
-      (windSpeed * 0.30 * (0.48 + this.tension * 0.52) * modelLift)
-      - (2.45 + slack * 2.6 + highAngleDrag);
+    // Keep normal afternoon wind capable of sustaining the kite. The line
+    // still limits radius and tension; this only removes the artificial
+    // constant downward pull that was pinning the kite near the roof.
+    const netVertical = THREE.MathUtils.clamp(
+      windSpeed * (0.30 + this.tension * 0.06) * modelLift
+        + this.socadaBoost * 0.35
+        - (0.82 + slack * 0.55 + highAngleDrag),
+      -1.5,
+      1.35
+    );
     _DesiredVel.y += netVertical;
 
     // Match the original kite's smooth, readable acceleration response.
@@ -1009,6 +1029,7 @@ const _vertCol = new THREE.Color();
 const _DesiredVel = new THREE.Vector3();
 const _airRelative = new THREE.Vector3();
 const _bankedSpan = new THREE.Vector3();
+const _bankLiftDirection = new THREE.Vector3();
 const _ropeVelocity = new THREE.Vector3();
 const _ropeDelta = new THREE.Vector3();
 const _ropeSide = new THREE.Vector3();

@@ -1703,6 +1703,19 @@ class Pipa3DGame {
     window.addEventListener('keyup', (e) => {
       this.keys[e.code] = false;
     });
+    const releaseAllControls = () => {
+      this.keys = {};
+      this.padSteer = 0;
+      this.uiHold.pull = false;
+      this.uiHold.release = false;
+      this.uiHold.quickRelease = false;
+      this.pointer.down = false;
+      this.pointer.rightDown = false;
+    };
+    window.addEventListener('blur', releaseAllControls);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) releaseAllControls();
+    });
 
     // Mouse / Touch directly on 3D Canvas
     const canvas = this.renderer.domElement;
@@ -1773,10 +1786,13 @@ class Pipa3DGame {
         btn.classList.remove('pressed');
         onUp();
       };
-      btn.addEventListener('pointerdown', start);
+      btn.addEventListener('pointerdown', (event) => {
+        try { btn.setPointerCapture(event.pointerId); } catch { /* capture may be unavailable */ }
+        start(event);
+      });
       btn.addEventListener('pointerup', end);
-      btn.addEventListener('pointerleave', end);
       btn.addEventListener('pointercancel', end);
+      btn.addEventListener('lostpointercapture', end);
     };
 
     bindHoldBtn('pad-left', () => { this.padSteer = -1; }, () => { if (this.padSteer < 0) this.padSteer = 0; });
@@ -2610,11 +2626,11 @@ class Pipa3DGame {
       const eyePos = _camDesiredPos.set(0, 11.48, 17.8);
       this.camera.position.lerp(eyePos, Math.min(1, dt * 10));
 
-      // Blend gaze slightly below raw kite height when kite is lower/mid so the laje & neighborhood anchor the view,
-      // while still tracking high climbs smoothly!
+      // Keep the kite inside the upper-middle of the frame without
+      // pointing the whole camera into the sky when it is near roof height.
       _lookAhead.set(
-        focusPos.x * 0.78,
-        THREE.MathUtils.clamp(focusPos.y * 0.74, 15.5, 42),
+        focusPos.x * 0.88,
+        THREE.MathUtils.clamp(focusPos.y - 4.5, 10.2, 34),
         focusPos.z
       );
       this.camLookTarget.lerp(_lookAhead, Math.min(1, dt * 8));
