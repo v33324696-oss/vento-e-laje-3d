@@ -226,7 +226,7 @@ export class Carretilha3D {
     this.swayOffset.x += (steerInput * 0.34 - this.swayOffset.x) * Math.min(1, dt * 10);
     this.swayOffset.y += (this.jerkImpulse * 0.22 - this.swayOffset.y) * Math.min(1, dt * 18);
 
-    if (cameraMode === 'laje' && camera) {
+    if ((cameraMode === 'laje' || cameraMode === 'primeira_pessoa') && camera) {
       // Position carretilha comfortably in lower-right foreground of pipeiro's view!
       camera.updateMatrixWorld();
       _camForward.set(0, 0, -1).applyQuaternion(camera.quaternion);
