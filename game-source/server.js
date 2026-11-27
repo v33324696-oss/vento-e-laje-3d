@@ -52,6 +52,7 @@ const safeState = (state = {}) => {
     lineDurability: Number.isFinite(Number(state.lineDurability)) ? Math.max(0.55, Math.min(1.35, Number(state.lineDurability))) : 1,
     lineRecovery: Number.isFinite(Number(state.lineRecovery)) ? Math.max(0.1, Math.min(1.2, Number(state.lineRecovery))) : 0.45,
     lineDischargeSafe: state.lineDischargeSafe === true,
+    windAlignment: Number.isFinite(Number(state.windAlignment)) ? Math.max(0, Math.min(1, Number(state.windAlignment))) : 0.5,
     modelId: typeof state.modelId === 'string' ? state.modelId.slice(0, 24) : 'murcha',
     patternId: typeof state.patternId === 'string' ? state.patternId.slice(0, 32) : 'estrela_paulista',
     lineTypeId: typeof state.lineTypeId === 'string' ? state.lineTypeId.slice(0, 32) : 'branca_pura',
@@ -196,6 +197,7 @@ function updateRoomRelo(room, dt, now) {
         socada: a.state.socada, disque: a.state.disque, disbicar: a.state.disbicar,
         largadaActive: a.state.largadaActive, largadaQuality: a.state.largadaQuality,
         linePower: a.state.linePower, ownU: contact.s, targetU: contact.t, wrapQuality,
+        windAlignment: a.state.windAlignment,
         rearAdvantage: rearAdvantage(a, b),
         defenderExposure: b.state.reelSpeed > 5 && !b.state.lineDischargeSafe ? Math.max(0, Math.min(1, (b.state.reelSpeed - 5) / 22)) : 0
       });
@@ -205,6 +207,7 @@ function updateRoomRelo(room, dt, now) {
         socada: b.state.socada, disque: b.state.disque, disbicar: b.state.disbicar,
         largadaActive: b.state.largadaActive, largadaQuality: b.state.largadaQuality,
         linePower: b.state.linePower, ownU: contact.t, targetU: contact.s, wrapQuality,
+        windAlignment: b.state.windAlignment,
         rearAdvantage: rearAdvantage(b, a),
         defenderExposure: a.state.reelSpeed > 5 && !a.state.lineDischargeSafe ? Math.max(0, Math.min(1, (a.state.reelSpeed - 5) / 22)) : 0
       });
