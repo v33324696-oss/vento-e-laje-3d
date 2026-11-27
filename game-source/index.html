@@ -109,6 +109,33 @@
     </div>
   </div>
 
+  <!-- Recover an intercepted kite by untying its rabiola and manually reeling it in. -->
+  <div id="rabiola-lock-overlay" class="rabiola-lock-overlay hidden" aria-live="polite">
+    <section class="rabiola-lock-card">
+      <span class="rabiola-lock-eyebrow">RESGATE DE PIPA AVOADA</span>
+      <h2 id="rabiola-lock-title">Desembarace a rabiola</h2>
+      <p id="rabiola-lock-help">A rabiola enrolou na sua linha. Acerte o ponto da agulha para soltar cada volta sem arrebentar o nó.</p>
+      <div id="rabiola-lock-pins" class="rabiola-lock-pins" aria-label="Progresso do desembolo"></div>
+
+      <div id="rabiola-lock-pick-phase">
+        <div class="rabiola-lock-track" aria-label="Medidor de precisão">
+          <span id="rabiola-lock-zone" class="rabiola-lock-zone"></span>
+          <span id="rabiola-lock-needle" class="rabiola-lock-needle"></span>
+        </div>
+        <p id="rabiola-lock-status" class="rabiola-lock-status">Trava 1 de 5 · aperte no ponto verde</p>
+        <button id="btn-rabiola-lockpick" class="rabiola-lock-action" type="button">PUXAR NO PONTO CERTO · ESPAÇO</button>
+        <p class="rabiola-lock-foot">São 5 travas. Três puxões fora do tempo fazem a pipa escapar.</p>
+      </div>
+
+      <div id="rabiola-lock-reel-phase" class="hidden">
+        <p id="rabiola-reel-status">Rabiola solta! Agora recolha a pipa até o pipeiro.</p>
+        <div class="rabiola-reel-track"><div id="rabiola-reel-fill" class="rabiola-reel-fill"></div></div>
+        <button id="btn-rabiola-reel" class="rabiola-lock-action" type="button">SEGURE PARA RECOLHER · W</button>
+        <p class="rabiola-lock-foot">Solte o botão e a pipa para de se aproximar. Segure W ou o botão.</p>
+      </div>
+    </section>
+  </div>
+
   <!-- Compact Controls Legend -->
   <aside id="controls-guide" class="controls-guide glass-card hud-hidden">
     <div class="guide-title">COMANDOS DO PIPEIRO</div>
@@ -118,7 +145,7 @@
     <div class="guide-row"><kbd>R</kbd> <span>DESCARREGAR RÁPIDO — abrir distância</span></div>
     <div class="guide-row"><kbd>B</kbd> <span>DISBICAR — puxão brusco com movimento</span></div>
     <div class="guide-row"><kbd>RELO</kbd> <span>Quando as linhas encostarem, aparece o aviso no centro</span></div>
-    <div class="guide-row"><kbd>APARAR</kbd> <span>Cruze sua linha diretamente na rabiola da pipa voada; corpo e fio cortado não contam</span></div>
+    <div class="guide-row"><kbd>APARAR</kbd> <span>Toque a rabiola; acerte 5 travas com ESPAÇO e segure W para recolher a pipa</span></div>
     <div class="guide-row"><kbd>COMBO FÁCIL</kbd> <span>Segure W para puxar e toque ESPAÇO para socar</span></div>
     <div class="guide-row"><kbd>Q / E</kbd> <span>Use durante o RELO para aplicar o disque e reforçar o ataque</span></div>
     <div class="guide-row"><kbd>A</kbd> <kbd>D</kbd> / <kbd>Setas</kbd> <span>Guiar o bico</span></div>
@@ -127,7 +154,7 @@
     <div class="guide-row"><kbd>V</kbd> <span>Voltar a segurar a pipa e escolher outro ponto</span></div>
     <div class="guide-row"><kbd>W A S D</kbd> <span>Andar pela laje com a pipa na mão</span></div>
     <div class="guide-row"><kbd>SHIFT</kbd> <span>Correr antes de lançar para ganhar impulso</span></div>
-    <div class="guide-row"><kbd>E</kbd> <span>Soltar a pipa manualmente</span></div>
+    <div class="guide-row"><kbd>ESPAÇO / E</kbd> <span>Com a pipa na mão, dê 3 tapas manuais para colocar no alto</span></div>
   </aside>
 
   <!-- Touch controller used while exploring the map on phones/tablets -->
@@ -140,7 +167,7 @@
     </div>
     <div class="touch-char-actions">
       <button type="button" id="touch-sprint" class="touch-action-btn">CORRER</button>
-      <button type="button" id="touch-launch" class="touch-action-btn touch-launch-btn">🪁 SOLTAR PIPA</button>
+      <button type="button" id="touch-launch" class="touch-action-btn touch-launch-btn">🪁 DAR TAPA (0/3)</button>
     </div>
   </section>
 
@@ -327,7 +354,7 @@
       <div class="welcome-actions">
         <button id="btn-open-oficina-start" class="secondary-cta">🎨 Oficina de Pipas</button>
         <button id="btn-open-online-start" class="secondary-cta">🌐 Jogar Online</button>
-        <button id="btn-start-game" class="primary-cta">SUBIR PIPA AGORA ▶</button>
+        <button id="btn-start-game" class="primary-cta">COMEÇAR COM A PIPA NA MÃO ▶</button>
       </div>
     </div>
   </div>
