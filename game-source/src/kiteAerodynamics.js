@@ -54,13 +54,17 @@ export function getWindPhase(id) {
 export function sampleWindAt(baseWind, position, time, phase = 0, out = {}) {
   const x = position.x || 0;
   const z = position.z || 0;
-  const gust = Math.sin(time * 0.72 + x * 0.035 + z * 0.018 + phase) * 0.52
-    + Math.sin(time * 1.63 - z * 0.027 + phase * 1.71) * 0.24;
-  const crossGust = Math.sin(time * 0.31 + x * 0.021 + phase * 2.3) * 0.34;
 
-  out.x = baseWind.x + gust * 0.48 + crossGust * 0.36;
-  out.y = baseWind.y + Math.sin(time * 0.87 + x * 0.02 + phase) * 0.11;
-  out.z = baseWind.z + gust * 0.62;
+  // A coherent regional wind field: nearby kites experience the same broad
+  // gust, with only a small position-dependent difference. Kite identity is
+  // deliberately a tiny detail instead of a separate, unrelated wind stream.
+  const regionalGust = Math.sin(time * 0.20 + x * 0.012 + z * 0.009) * 0.28
+    + Math.sin(time * 0.43 - z * 0.014 + x * 0.005 + 0.6) * 0.12;
+  const crossGust = Math.sin(time * 0.15 + x * 0.009 + phase * 0.16) * 0.08;
+
+  out.x = baseWind.x + regionalGust * 0.22 + crossGust * 0.14;
+  out.y = baseWind.y + Math.sin(time * 0.18 + x * 0.008 + phase * 0.08) * 0.035;
+  out.z = baseWind.z + regionalGust * 0.34;
   return out;
 }
 
