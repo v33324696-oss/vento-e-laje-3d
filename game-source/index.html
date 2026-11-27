@@ -327,22 +327,22 @@
       </section>
 
       <div class="mode-cards">
-        <button class="mode-card selected" data-mode="festival">
+        <button type="button" class="mode-card selected" data-mode="festival">
           <div class="mc-icon">🪁</div>
           <div class="mc-title">Festival na Quebrada</div>
           <div class="mc-desc">Combate livre contra 6 pipeiros nas lajes vizinhas, relos e pipas avoadas para aparar.</div>
         </button>
-        <button class="mode-card" data-mode="torneio">
+        <button type="button" class="mode-card" data-mode="torneio">
           <div class="mc-icon">🏆</div>
           <div class="mc-title">Torneio Rei da Laje</div>
           <div class="mc-desc">Rodadas progressivas, rivais mais inteligentes e recompensa por sequência de vitórias.</div>
         </button>
-        <button class="mode-card" data-mode="duelo">
+        <button type="button" class="mode-card" data-mode="duelo">
           <div class="mc-icon">⚔️</div>
           <div class="mc-title">Arena 1 contra 1</div>
           <div class="mc-desc">Um único adversário, espaço de combate mais limpo e duelo focado em técnica.</div>
         </button>
-        <button class="mode-card" data-mode="zen">
+        <button type="button" class="mode-card" data-mode="zen">
           <div class="mc-icon">🌅</div>
           <div class="mc-title">Voo Livre Zen</div>
           <div class="mc-desc">Empine sem cortes, ajuste a velocidade do vento e pratique manobras ao pôr do sol.</div>
@@ -367,7 +367,7 @@
         <button id="btn-open-oficina-start" class="secondary-cta">🎨 Oficina de Pipas</button>
         <button id="btn-open-online-start" class="secondary-cta">🌐 Jogar Online</button>
         <button id="btn-open-garage-start" class="secondary-cta">🏠 Minha Casa</button>
-        <button id="btn-start-game" class="primary-cta">COMEÇAR COM A PIPA NA MÃO ▶</button>
+        <button type="button" id="btn-start-game" class="primary-cta">COMEÇAR COM A PIPA NA MÃO ▶</button>
       </div>
       <div id="boot-status" class="boot-status hidden" role="alert" aria-live="polite"></div>
     </div>
@@ -573,50 +573,38 @@
       };
 
       document.addEventListener('click', (event) => {
-        const modeCard = event.target.closest?.('.mode-card');
-        if (modeCard) {
+        const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+        const modeCard = target?.closest('.mode-card');
+        if (modeCard && (!window.pipaGame || typeof window.pipaGame.setGameMode !== 'function')) {
           event.preventDefault();
           document.querySelectorAll('.mode-card').forEach((card) => {
             card.classList.toggle('selected', card === modeCard);
           });
-          const mode = modeCard.dataset.mode;
-          window.__pipaPendingMode = mode;
-          if (window.pipaGame && typeof window.pipaGame.setGameMode === 'function') {
-            try {
-              window.pipaGame.setGameMode(mode);
-              hideBootStatus();
-            } catch (error) {
-              window.__pipaBootError = error;
-              showBootStatus('O modo foi selecionado, mas o jogo encontrou um erro: ' + (error?.message || String(error)));
-            }
-          } else if (window.__pipaBootError) {
-            showBootStatus('A interface respondeu, mas o motor 3D não iniciou: ' + (window.__pipaBootError.message || String(window.__pipaBootError)));
+          window.__pipaPendingMode = modeCard.dataset.mode;
+          if (window.__pipaBootError) {
+            showBootStatus('O motor 3D não iniciou: ' + (window.__pipaBootError.message || String(window.__pipaBootError)));
+          } else {
+            showBootStatus('Carregando o motor 3D. O modo escolhido será aplicado assim que ele terminar de iniciar.');
           }
           return;
         }
 
-        const startButton = event.target.closest?.('#btn-start-game');
-        if (!startButton) return;
+        const startButton = target?.closest('#btn-start-game');
+        if (!startButton || (window.pipaGame && typeof window.pipaGame.startGame === 'function')) return;
         event.preventDefault();
-        if (!window.pipaGame || typeof window.pipaGame.startGame !== 'function') {
-          const error = window.__pipaBootError;
-          const details = error
-            ? (error.message || String(error))
-            : 'O JavaScript principal ainda não terminou de carregar.';
+
+        if (window.__pipaBootError) {
+          const details = window.__pipaBootError.message || String(window.__pipaBootError);
           const webglHint = /webgl|context|gpu|renderer/i.test(details)
-            ? ' Verifique se a aceleração gráfica está ativada no Edge e feche outras abas com jogos 3D.'
-            : ' Recarregue a página com Ctrl + F5.';
-          showBootStatus('Não foi possível iniciar o jogo: ' + details + webglHint);
+            ? ' Ative a aceleração gráfica do Edge e reinicie o navegador.'
+            : ' Confira a conexão e recarregue a página.';
+          showBootStatus('O motor 3D encontrou um erro: ' + details + webglHint);
           return;
         }
-        try {
-          window.pipaGame.startGame();
-          hideBootStatus();
-        } catch (error) {
-          window.__pipaBootError = error;
-          console.error('[Vento & Laje] falha ao iniciar a partida:', error);
-          showBootStatus('Erro ao iniciar a partida: ' + (error?.message || String(error)) + ' Recarregue com Ctrl + F5.');
-        }
+
+        // Do not lose a start click made while the engine/module is loading.
+        window.__pipaPendingStart = true;
+        showBootStatus('Inicializando o jogo 3D… seu clique foi guardado e a partida abrirá assim que o motor estiver pronto.');
       }, true);
 
       window.addEventListener('error', (event) => {

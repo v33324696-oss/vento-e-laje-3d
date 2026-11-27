@@ -404,7 +404,20 @@ class Pipa3DGame {
   }
 
   _initUI() {
-    // Welcome mode/start clicks are handled by the early bootstrap in index.html.
+    // Bind the welcome controls directly to the game instance. The small
+    // bootstrap in index.html only queues clicks while this instance loads.
+    const modeCards = document.querySelectorAll('.mode-card');
+    modeCards.forEach((card) => {
+      card.addEventListener('click', () => {
+        modeCards.forEach((item) => item.classList.toggle('selected', item === card));
+        this.setGameMode(card.dataset.mode);
+      });
+    });
+    document.getElementById('btn-start-game')?.addEventListener('click', (event) => {
+      event.preventDefault();
+      this.startGame();
+    });
+
     // Select one of the playable 3D maps.
     document.querySelectorAll('.map-option').forEach((button) => {
       button.addEventListener('click', () => this._applyMapSelection(button.dataset.map));
@@ -2798,25 +2811,43 @@ class Pipa3DGame {
   }
 }
 
-window.addEventListener('DOMContentLoaded', () => {
+const bootPipaGame = () => {
+  if (window.pipaGame) return;
   try {
-    window.pipaGame = new Pipa3DGame();
-    if (window.__pipaPendingMode) window.pipaGame.setGameMode(window.__pipaPendingMode);
+    const game = new Pipa3DGame();
+    window.pipaGame = game;
+    if (window.__pipaPendingMode) game.setGameMode(window.__pipaPendingMode);
+    if (window.__pipaPendingStart) {
+      window.__pipaPendingStart = false;
+      game.startGame();
+    }
     window.__pipaBootError = null;
   } catch (error) {
     window.__pipaBootError = error;
     console.error('[Vento & Laje] o motor do jogo não conseguiu iniciar:', error);
     const status = document.getElementById('boot-status');
     if (status) {
-      status.textContent = 'O motor 3D não iniciou: ' + (error?.message || String(error)) + ' Verifique a aceleração gráfica do navegador e recarregue com Ctrl + F5.';
+      status.textContent = 'O motor 3D não iniciou: ' + (error?.message || String(error)) + ' Verifique a aceleração gráfica do navegador e recarregue a página.';
       status.classList.remove('hidden');
     }
   }
 
   if ('serviceWorker' in navigator && !import.meta.env.DEV) {
-    window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}), { once: true });
+    const registerWorker = () => navigator.serviceWorker.register('/sw.js').catch((error) => {
+      console.warn('[Vento & Laje] atualização offline indisponível:', error);
+    });
+    if (document.readyState === 'complete') registerWorker();
+    else window.addEventListener('load', registerWorker, { once: true });
   }
-});
+};
+
+// Module startup can finish after DOM parsing; handle both states so the
+// engine is never dependent on catching a single DOMContentLoaded event.
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootPipaGame, { once: true });
+} else {
+  bootPipaGame();
+}
 
 const _ptA = new THREE.Vector3();
 const _ptB = new THREE.Vector3();
