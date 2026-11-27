@@ -1694,3 +1694,12 @@ button { touch-action: manipulation; }
   .online-chat-messages { max-height: 112px; }
   .online-chat-compose input { font-size: 16px; }
 }
+
+.fps-pill {
+  align-self: center; padding: 4px 7px;
+  border: 1px solid rgba(52,211,153,.32); border-radius: 999px;
+  color: #86efac; background: rgba(16,185,129,.1);
+  font-size: 8px; font-weight: 900; white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 820px) { .fps-pill { display: none; } }

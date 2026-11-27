@@ -89,6 +89,8 @@ class Pipa3DGame {
     this.remotePlayers = new Map();
     this.lastNetSendMs = 0;
     this.onlineRoomCode = null;
+    this.onlineRoster = [];
+    this.flightSaveAccumulator = 0;
 
     // Wind state
     this.windVec = new THREE.Vector3(0, 0.4, -9.5);
@@ -796,7 +798,16 @@ class Pipa3DGame {
       this._syncRemoteRoster(message.players || []);
     } else if (message.type === 'player-state') {
       this._upsertRemotePlayer(message.player);
+      const updatedPlayer = message.player;
+      if (updatedPlayer?.id) {
+        const rosterIndex = this.onlineRoster.findIndex((player) => player.id === updatedPlayer.id);
+        if (rosterIndex >= 0) this.onlineRoster[rosterIndex] = updatedPlayer;
+        else this.onlineRoster.push(updatedPlayer);
+        this._updateOnlineLobby(this.onlineRoster);
+      }
     } else if (message.type === 'player-left') {
+      this.onlineRoster = this.onlineRoster.filter((player) => player.id !== message.playerId);
+      this._updateOnlineLobby(this.onlineRoster);
       this._removeRemotePlayer(message.playerId);
     } else if (message.type === 'relo-result') {
       this._handleOnlineReloResult(message);
@@ -805,6 +816,7 @@ class Pipa3DGame {
     } else if (message.type === 'emote') {
       this._appendOnlineChat({ name: message.name, text: message.emote, emote: true });
     } else if (message.type === 'disconnected') {
+      this.onlineRoster = [];
       for (const id of [...this.remotePlayers.keys()]) this._removeRemotePlayer(id);
       this._showOnlineSection('home');
     }
@@ -840,8 +852,6 @@ class Pipa3DGame {
       this.score += pts;
       this.combo = Math.min(8, this.combo + 1);
       this.sound.playCut(true);
-      this.progression.record('cut', 1);
-      this._renderCareerHub();
       this.showBanner('RELO ONLINE!', `Você cortou ${loserName} ${message.moveName || 'no cruzamento'}! +${pts} pts`, 'normal');
     } else {
       const loser = this.remotePlayers.get(message.loserId);
@@ -858,10 +868,11 @@ class Pipa3DGame {
   }
 
   _syncRemoteRoster(players) {
-    this._updateOnlineLobby(players);
-    const keep = new Set(players.filter((player) => player.id !== this.multiplayer.playerId).map((player) => player.id));
+    this.onlineRoster = Array.isArray(players) ? players.slice() : [];
+    this._updateOnlineLobby(this.onlineRoster);
+    const keep = new Set(this.onlineRoster.filter((player) => player.id !== this.multiplayer.playerId).map((player) => player.id));
     for (const id of [...this.remotePlayers.keys()]) if (!keep.has(id)) this._removeRemotePlayer(id);
-    for (const player of players) if (player.id !== this.multiplayer.playerId) this._upsertRemotePlayer(player);
+    for (const player of this.onlineRoster) if (player.id !== this.multiplayer.playerId) this._upsertRemotePlayer(player);
   }
 
   _upsertRemotePlayer(player) {
@@ -2960,10 +2971,14 @@ class Pipa3DGame {
 
     if (this.started) {
       this.progression.profile.stats.flightSeconds += dt;
+      this.flightSaveAccumulator += dt;
       this.hudUpdateAccumulator += dt;
       if (this.hudUpdateAccumulator >= 0.1) {
         this._updateHUD();
-        if (Math.floor(this.elapsedTime) % 10 === 0) this.progression.save();
+        if (this.flightSaveAccumulator >= 10) {
+          this.progression.save();
+          this.flightSaveAccumulator %= 10;
+        }
         this.hudUpdateAccumulator %= 0.1;
       }
     }
