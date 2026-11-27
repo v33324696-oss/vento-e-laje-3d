@@ -28,7 +28,7 @@ export class MultiplayerClient {
     return `${secure ? 'wss:' : 'ws:'}//${window.location.host}/ws`;
   }
 
-  connect({ name, room = '', create = false, serverUrl = '', mapId = 'laje' }) {
+  connect({ name, room = '', create = false, serverUrl = '', mapId = 'laje', difficulty = 'normal' }) {
     return new Promise((resolve, reject) => {
       this.disconnect(false);
       const url = this.buildUrl(serverUrl);
@@ -46,7 +46,7 @@ export class MultiplayerClient {
       socket.addEventListener('open', () => {
         socket.send(JSON.stringify({
           type: 'join', name: (name || 'Pipeiro').slice(0, 18),
-          room: room.trim().toUpperCase(), create: !!create, mapId
+          room: room.trim().toUpperCase(), create: !!create, mapId, difficulty
         }));
       });
 
