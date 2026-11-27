@@ -17,6 +17,7 @@ import { evaluateReloScore } from './relo.js';
 import { ProgressionStore } from './progression.js';
 import { getAIDifficulty, getCombatDamageMultipliers } from './difficulty.js';
 import { findRabiolaCapture } from './capture.js';
+import { NeighborhoodEventDirector } from './worldEvents.js';
 import {
   createRabiolaLockState,
   getRabiolaLockReading,
@@ -31,6 +32,7 @@ class Pipa3DGame {
 
     // Game state
     this.started = false;
+    this.worldEvents = new NeighborhoodEventDirector();
     this.gameMode = 'festival'; // 'festival' | 'torneio' | 'zen'
     this.matchDifficulty = 'normal';
     this.weatherOrder = ['tarde', 'pordosol', 'ventania', 'nublado', 'chuva'];
@@ -1916,8 +1918,16 @@ class Pipa3DGame {
     }, 3400);
   }
 
+  _updateNeighborhoodEvents(dt) {
+    const enabled = this.started && this.gameMode !== 'online' && this.selectedMap !== 'casa';
+    const result = this.worldEvents.update(dt, enabled);
+    if (result.started) this.showBanner(result.started.title, result.started.description, 'normal');
+    if (result.ended) this.showBanner('EVENTO ENCERRADO', 'O vento voltou ao comportamento normal. Fique atento ao próximo acontecimento do bairro.', 'catch');
+  }
+
   _updateWind(time, dt = 0.016) {
     const preset = this.world.currentPreset;
+    const eventProfile = this.worldEvents.currentEvent;
 
     // The previous gust curve changed both wind speed and direction too much.
     // Keep long, readable gust cycles and reserve strong variation for the
@@ -1926,6 +1936,7 @@ class Pipa3DGame {
       + Math.sin(time * 0.17) * preset.gustStrength * 0.32
       + Math.sin(time * 0.39 + 0.8) * preset.gustStrength * 0.12;
 
+    if (eventProfile) speed *= eventProfile.windMultiplier;
     if (this.gameMode === 'torneio') {
       speed += (this.tournamentWave - 1) * 0.5;
     } else if (this.gameMode === 'zen') {
@@ -1935,7 +1946,8 @@ class Pipa3DGame {
     // Wind mostly follows the same corridor; crosswind changes are gradual
     // and limited so a kite never gets a sudden sideways shove.
     const lateralAngle = Math.sin(time * 0.075) * 0.105
-      + Math.cos(time * 0.16) * 0.04;
+      + Math.cos(time * 0.16) * 0.04
+      + (eventProfile?.crosswind || 0);
     _windTarget.set(
       Math.sin(lateralAngle) * speed,
       0.22 + Math.sin(time * 0.18) * 0.035,
@@ -2336,7 +2348,7 @@ class Pipa3DGame {
         this.progression.recordReputation(this.selectedMap, 12);
         this.cuts++;
         this._recordProgress('cut');
-        const basePts = 150 * this.combo;
+        const basePts = Math.round(150 * this.combo * (this.worldEvents.currentEvent?.rewardMultiplier || 1));
         const weakLineBonus = loser.lineType.cutPower > winner.lineType.cutPower ? 100 : 0;
         const pts = basePts + weakLineBonus;
         this.progression.recordCombat({
@@ -2731,6 +2743,7 @@ class Pipa3DGame {
     const elapsed = this.elapsedTime;
 
     try {
+      this._updateNeighborhoodEvents(dt);
       this._updateRabiolaRecovery(dt);
 
     // 1. Update wind, scene and character exploration.
@@ -2798,7 +2811,7 @@ class Pipa3DGame {
       matchDifficulty: this.matchDifficulty,
       gameMode: this.gameMode,
       tournamentWave: this.tournamentWave
-    });
+    }) * (this.worldEvents.currentEvent?.aiMultiplier || 1);
     const simulationRivals = this.started ? this._getActiveRivals() : [];
     for (const r of simulationRivals) {
       const aiControls = r.ai.update({
