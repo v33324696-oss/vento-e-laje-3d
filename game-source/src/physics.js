@@ -10,6 +10,9 @@ import { calculateCableResponse, calculateStructuralResponse, calculateWinchResp
 
 export const STRING_SEGMENTS = 28;
 
+// Normal kites fly forward at a moderate line angle, not straight overhead.
+const MAX_FLIGHT_ELEVATION_TAN = Math.tan(THREE.MathUtils.degToRad(56));
+
 // Computes closest points between 3D line segments P1-Q1 and P2-Q2
 export function closestPointsBetweenSegments(p1, q1, p2, q2, out1, out2) {
   _d1.subVectors(q1, p1);
@@ -499,6 +502,31 @@ export class KiteEntity {
     }
 
     this.position.addScaledVector(this.velocity, stepDt);
+
+    // A real kite flies in a forward window, not directly over the flyer.
+    // Limit the line's elevation angle to 56 degrees above the horizon. This
+    // is a shared constraint for the player and every AI kite, so rivals stay
+    // in the same reachable airspace and can still be challenged from below.
+    const horizontalX = this.position.x - this.anchorPos.x;
+    const horizontalZ = this.position.z - this.anchorPos.z;
+    const horizontalDistance = Math.hypot(horizontalX, horizontalZ);
+    const verticalDistance = this.position.y - this.anchorPos.y;
+    const maxVerticalDistance = horizontalDistance * MAX_FLIGHT_ELEVATION_TAN;
+    if (verticalDistance > maxVerticalDistance) {
+      this.position.y = this.anchorPos.y + maxVerticalDistance;
+      _flightConeNormal.set(
+        -MAX_FLIGHT_ELEVATION_TAN * horizontalX / Math.max(0.001, horizontalDistance),
+        1,
+        -MAX_FLIGHT_ELEVATION_TAN * horizontalZ / Math.max(0.001, horizontalDistance)
+      ).normalize();
+
+      // Remove only velocity that would push the kite farther outside the
+      // flight window; tangential movement along the window remains free.
+      const outwardClimb = this.velocity.dot(_flightConeNormal);
+      if (outwardClimb > 0) {
+        this.velocity.addScaledVector(_flightConeNormal, -outwardClimb);
+      }
+    }
 
     // 4. Keep kite in forward sky arena & enforce spherical tether constraint
     // Prevent flying behind the player's back (+Z)
@@ -1071,6 +1099,7 @@ const _caughtScale = new THREE.Vector3(1, 1, 1);
 const _caughtMatrix = new THREE.Matrix4();
 
 const _worldUp = new THREE.Vector3(0, 1, 0);
+const _flightConeNormal = new THREE.Vector3();
 const _rad = new THREE.Vector3();
 const _tRight = new THREE.Vector3();
 const _tUp = new THREE.Vector3();
