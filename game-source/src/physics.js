@@ -6,7 +6,7 @@ import { KiteVisual } from './kiteMesh.js';
 import { LINE_TYPES } from './carretilha.js';
 import { evaluateReloScore } from './relo.js';
 import { calculateAerodynamicForces, getKiteAeroProfile, getWindPhase, sampleWindAt } from './kiteAerodynamics.js';
-import { calculateCableResponse, calculateStructuralResponse } from './kiteStructure.js';
+import { calculateCableResponse, calculateStructuralResponse, calculateWinchResponse } from './kiteStructure.js';
 
 export const STRING_SEGMENTS = 28;
 
@@ -202,7 +202,7 @@ export class KiteEntity {
     if (!this.active) return;
     this.socadaBoost = Math.min(1.35, this.socadaBoost + 0.95 * strength);
     this.tension = Math.min(1.0, this.tension + 0.45);
-    this.lineLength = Math.max(this.minLine, this.lineLength - 0.38 * strength);
+    this.tension = Math.min(1, this.tension + 0.12 * strength);
     // Lock spin immediately so kite shoots straight where its nose points!
     this.angularVel *= 0.15;
   }
@@ -230,7 +230,7 @@ export class KiteEntity {
     this.disbicarBoost = 1.0;
     this.disbicarCooldown = 0.48;
     this.tension = Math.min(1, this.tension + 0.38);
-    this.lineLength = Math.max(this.minLine, this.lineLength - 0.85);
+    this.lineLength = Math.max(this.minLine, this.lineLength - 0.12);
     this.angularVel += this.disbicarDir * 3.1;
     return true;
   }
@@ -275,90 +275,38 @@ export class KiteEntity {
 
   _updateStringCurve(windVec, highlightU = -1, highlightStrength = 0, dt = 0.016) {
     const bridlePos = this.visual.getBridleWorldPosition(_bridleWorld);
-    const span = this.anchorPos.distanceTo(bridlePos);
-    const ropeLength = Math.max(span, this.lineLength);
-    const segmentLength = ropeLength / STRING_SEGMENTS;
-    const stepDt = Math.min(0.033, Math.max(0.001, dt));
-    const dt2 = stepDt * stepDt;
-
-    // Initialize a catenary-shaped rope when the kite launches or is reset.
-    if (!this.stringRopeReady) {
-      const slack = Math.max(0, ropeLength - span);
-      const initialSag = Math.min(7.5, Math.sqrt(Math.max(0, ropeLength * ropeLength - span * span)) * 0.22);
-      for (let i = 0; i <= STRING_SEGMENTS; i++) {
-        const u = i / STRING_SEGMENTS;
-        const parabola = 4 * u * (1 - u);
-        const node = this.stringNodes[i];
-        node.lerpVectors(this.anchorPos, bridlePos, u);
-        node.y -= initialSag * parabola;
-        this.stringPrevNodes[i].copy(node);
-      }
-      this.stringRopeReady = true;
-      void slack;
-    }
-
-    this.stringNodes[0].copy(this.anchorPos);
-    this.stringNodes[STRING_SEGMENTS].copy(bridlePos);
-    this.stringPrevNodes[0].copy(this.anchorPos);
-    this.stringPrevNodes[STRING_SEGMENTS].copy(bridlePos);
-
-    // Verlet integration for a flexible line with gravity, wind loading and a
-    // little high-frequency vibration during socadas / line-to-line contact.
-    const lineDamping = THREE.MathUtils.clamp(0.984 - this.lineType.elasticity * 0.28, 0.955, 0.985);
-    const windLoad = 0.13 * this.lineType.drag;
-    for (let i = 1; i < STRING_SEGMENTS; i++) {
-      const node = this.stringNodes[i];
-      const previous = this.stringPrevNodes[i];
-      _ropeVelocity.subVectors(node, previous).multiplyScalar(lineDamping);
-      previous.copy(node);
-      node.add(_ropeVelocity);
-      node.y -= 9.8 * dt2 * 0.16;
-      node.addScaledVector(windVec, windLoad * dt2);
-      const u = i / STRING_SEGMENTS;
-      const envelope = Math.sin(u * Math.PI);
-      const whip = Math.sin(performance.now() * 0.012 - i * 0.62)
-        * (this.socadaBoost * 0.018 + highlightStrength * 0.012);
-      node.x += whip * envelope;
-    }
-
-    // Distance constraints preserve the deployed line length while allowing
-    // slack to hang naturally; both endpoints stay attached to the pipeiro/kite.
-    for (let pass = 0; pass < 5; pass++) {
-      this.stringNodes[0].copy(this.anchorPos);
-      this.stringNodes[STRING_SEGMENTS].copy(bridlePos);
-      for (let i = 0; i < STRING_SEGMENTS; i++) {
-        const a = this.stringNodes[i];
-        const b = this.stringNodes[i + 1];
-        _ropeDelta.subVectors(b, a);
-        const distance = _ropeDelta.length() || 0.0001;
-        const correction = (distance - segmentLength) / distance;
-        if (i === 0) {
-          b.addScaledVector(_ropeDelta, -correction);
-        } else if (i === STRING_SEGMENTS - 1) {
-          a.addScaledVector(_ropeDelta, correction);
-        } else {
-          a.addScaledVector(_ropeDelta, correction * 0.5);
-          b.addScaledVector(_ropeDelta, -correction * 0.5);
-        }
-      }
-    }
-
-    this.stringNodes[0].copy(this.anchorPos);
-    this.stringNodes[STRING_SEGMENTS].copy(bridlePos);
+    _ropeDelta.subVectors(bridlePos, this.anchorPos);
+    const span = _ropeDelta.length();
+    const direction = _ropeDelta.multiplyScalar(1 / Math.max(0.001, span));
+    const slack = Math.max(0, this.lineLength - span);
+    const tensionFactor = THREE.MathUtils.clamp((this.tension - 0.22) / 0.58, 0, 1);
+    const sag = Math.min(4.8, Math.sqrt(Math.max(0, 2 * span * slack)) * 0.13)
+      * (1 - tensionFactor * 0.78);
+    _ropeSide.crossVectors(direction, _worldUp).normalize();
+    if (_ropeSide.lengthSq() < 0.001) _ropeSide.set(1, 0, 0);
+    const windSide = THREE.MathUtils.clamp(windVec.dot(_ropeSide), -8, 8);
+    const windBow = THREE.MathUtils.clamp(windSide * slack * 0.0032 * this.lineType.drag, -0.8, 0.8);
+    const vibration = (this.socadaBoost * 0.012 + highlightStrength * 0.01)
+      * Math.min(1, Math.max(0, dt) * 60);
     const baseColor = _baseCol.setHex(this.lineType.color);
     const hotColor = _hotCol.setHex(0xffffff);
 
     for (let i = 0; i <= STRING_SEGMENTS; i++) {
       const u = i / STRING_SEGMENTS;
+      const parabola = 4 * u * (1 - u);
       const node = this.stringNodes[i];
+      node.lerpVectors(this.anchorPos, bridlePos, u);
+      node.y -= parabola * sag;
+      node.addScaledVector(_ropeSide, parabola * windBow);
+      node.x += Math.sin(u * Math.PI * 5 + performance.now() * 0.006) * vibration * parabola;
+
       this.stringFlatPos[i * 3] = node.x;
       this.stringFlatPos[i * 3 + 1] = node.y;
       this.stringFlatPos[i * 3 + 2] = node.z;
 
       let glow = 0;
       if (highlightU >= 0 && highlightStrength > 0) {
-        const distU = Math.abs(u - highlightU);
-        glow = Math.max(0, 1 - distU * 5.5) * highlightStrength;
+        glow = Math.max(0, 1 - Math.abs(u - highlightU) * 5.5) * highlightStrength;
       }
       _vertCol.copy(baseColor).lerp(hotColor, glow);
       this.stringColors[i * 3] = _vertCol.r;
@@ -399,21 +347,21 @@ export class KiteEntity {
     if (this.tailCutCooldown > 0) this.tailCutCooldown = Math.max(0, this.tailCutCooldown - stepDt);
 
     // 1. Line Reel & Tension state
-    let targetTension = 0.22;
+    let targetTension = 0.36;
     this.reelSpeed = 0;
 
     if (controls.pull) {
-      this.reelSpeed = -15.5 * spec.speedMult;
+      this.reelSpeed = -7.2 * spec.speedMult;
       this.lineLength = Math.max(this.minLine, this.lineLength + this.reelSpeed * stepDt);
-      targetTension = 0.86;
+      targetTension = 0.70;
     } else if (controls.quickRelease) {
-      this.reelSpeed = 29.0;
+      this.reelSpeed = 15.5;
       this.lineLength = Math.min(this.maxLine, this.lineLength + this.reelSpeed * stepDt);
-      targetTension = 0.055;
+      targetTension = 0.12;
     } else if (controls.release) {
-      this.reelSpeed = 8.2;
+      this.reelSpeed = 5.2;
       this.lineLength = Math.min(this.maxLine, this.lineLength + this.reelSpeed * stepDt);
-      targetTension = 0.14;
+      targetTension = 0.22;
     }
 
     // Manual inputs alter the desired feel, while the tether constraint below
@@ -506,28 +454,40 @@ export class KiteEntity {
       if (this.velocity.z > 0) this.velocity.z *= -0.25;
     }
 
-    // A flying line is a cable: it can go slack, but it cannot push the kite.
-    // Only correct the position when the kite actually travels beyond deployed line.
+    // Unilateral tether: it only pulls, never pushes. A winch shortens the
+    // permitted radius and progressively removes outward radial velocity.
     _rad.subVectors(this.position, this.anchorPos);
-    const currDist = _rad.length() || 1;
-    let cableTensionTarget = 0;
-    if (currDist > this.lineLength) {
-      const extension = currDist - this.lineLength;
+    let currDist = _rad.length() || 1;
+    let cableTensionTarget = this.reelSpeed < -0.1 ? 0.58 : 0.18;
+    const extension = Math.max(0, currDist - this.lineLength);
+    const nearTaut = currDist >= this.lineLength - (this.reelSpeed < -0.1 ? 0.8 : 0.18);
+
+    if (extension > 0.001 || (this.reelSpeed < -0.1 && nearTaut)) {
       _rad.divideScalar(currDist);
       const radialVelocity = this.velocity.dot(_rad);
-      const cable = calculateCableResponse(extension, radialVelocity, this.lineType);
-      cableTensionTarget = cable.tension;
-      if (cable.positionCorrection > 0) {
-        this.position.addScaledVector(_rad, -Math.min(extension, cable.positionCorrection));
+      const cable = calculateCableResponse(extension, Math.max(0, radialVelocity), this.lineType);
+      cableTensionTarget = Math.max(cableTensionTarget, cable.tension);
+
+      // Correct the geometric over-extension completely, so the line never
+      // jitters outside its deployed length from a partially corrected spring.
+      if (extension > 0.001) {
+        this.position.addScaledVector(_rad, -extension);
+        currDist = this.lineLength;
       }
-      if (radialVelocity > Math.max(0, this.reelSpeed) || extension > 0) {
-        this.velocity.addScaledVector(_rad, -cable.radialImpulse);
+
+      // While pulling, the reel physically hauls the kite inward. The response
+      // is damped over several frames instead of teleporting its velocity.
+      const winch = calculateWinchResponse(radialVelocity, this.reelSpeed, stepDt, this.lineType);
+      if (winch.velocityChange < 0) {
+        this.velocity.addScaledVector(_rad, winch.velocityChange);
+      } else if (radialVelocity > Math.max(0, this.reelSpeed)) {
+        this.velocity.addScaledVector(_rad, -Math.min(radialVelocity - Math.max(0, this.reelSpeed), cable.radialImpulse));
       }
     }
 
-    this.cableTension += (cableTensionTarget - this.cableTension) * Math.min(1, stepDt * 10);
+    this.cableTension += (cableTensionTarget - this.cableTension) * Math.min(1, stepDt * 7);
     const physicalTension = Math.max(targetTension, this.cableTension);
-    this.tension += (physicalTension - this.tension) * Math.min(1, stepDt * 9);
+    this.tension += (physicalTension - this.tension) * Math.min(1, stepDt * 7);
 
     // Rooftop / Ground floor safety check
     if (this.position.y < minGroundY) {
@@ -1075,6 +1035,7 @@ const _DesiredVel = new THREE.Vector3();
 const _airRelative = new THREE.Vector3();
 const _ropeVelocity = new THREE.Vector3();
 const _ropeDelta = new THREE.Vector3();
+const _ropeSide = new THREE.Vector3();
 const _d1 = new THREE.Vector3();
 const _d2 = new THREE.Vector3();
 const _r = new THREE.Vector3();
