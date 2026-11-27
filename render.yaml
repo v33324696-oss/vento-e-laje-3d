@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     region: ohio
-    buildCommand: "cat source.part.* | base64 -d > /tmp/game-source.tar.gz && mkdir -p app && tar -xzf /tmp/game-source.tar.gz -C app && cd app && npm ci --include=dev --no-audit --no-fund && npm run build"
-    startCommand: "cd app && npm start"
+    buildCommand: "cd game-source && npm ci --include=dev --no-audit --no-fund && npm run build"
+    startCommand: "cd game-source && npm start"
     healthCheckPath: /healthz
     autoDeployTrigger: commit
