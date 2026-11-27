@@ -17,6 +17,11 @@ import { evaluateReloScore } from './relo.js';
 import { ProgressionStore } from './progression.js';
 import { getAIDifficulty, getCombatDamageMultipliers } from './difficulty.js';
 import { findRabiolaCapture } from './capture.js';
+import {
+  createRabiolaLockState,
+  getRabiolaLockReading,
+  attemptRabiolaLock
+} from './lockpick.js';
 
 class Pipa3DGame {
   constructor() {
@@ -88,6 +93,11 @@ class Pipa3DGame {
     this.lastReloDistance = Infinity;
     this.lastReloCrossingQuality = 0;
     this.previousReleaseHeld = false;
+    this.rabiolaLock = null;
+    this.rabiolaReelHeld = false;
+    this.launchTapCount = 0;
+    this.lastLaunchTapAt = -Infinity;
+    this.launchTapQuality = 0;
 
     this._initThree();
     this._initEntities();
@@ -189,6 +199,10 @@ class Pipa3DGame {
   _preparePlayerKiteInHand() {
     this.playerLaunched = false;
     this.playerKiteInHand = true;
+    this.launchTapCount = 0;
+    this.lastLaunchTapAt = -Infinity;
+    this.launchTapQuality = 0;
+    this.rabiolaReelHeld = false;
     this.playerKite.active = false;
     this.playerKite.velocity.set(0, 0, 0);
     this.playerKite.reelSpeed = 0;
@@ -213,6 +227,7 @@ class Pipa3DGame {
     this.carretilha.root.rotation.set(0, avatar.rotation.y, 0);
     this.carretilha.getLineExitWorldPosition(this.playerKite.anchorPos);
     this.playerKite.position.copy(_heldKiteLocal).applyEuler(avatar.rotation).add(avatar.position);
+    this.playerKite.position.y += this.launchTapCount * 0.14;
     this.playerKite.quaternion.setFromEuler(_heldKiteEuler.set(0, avatar.rotation.y, 0));
     this.playerKite.visual.update({
       position: this.playerKite.position,
@@ -236,10 +251,54 @@ class Pipa3DGame {
     this.camModeIdx = this.cameraModes.findIndex((camera) => camera.id === 'personagem');
     document.getElementById('label-camera').textContent = this.cameraModes[this.camModeIdx].label;
     document.getElementById('label-explore').textContent = 'Preparar pipa';
+    this._syncLaunchButton();
   }
 
-  _launchPlayerKite() {
-    if (!this.started || !this.playerKiteInHand) return;
+  _syncLaunchButton() {
+    const button = document.getElementById('touch-launch');
+    if (button) button.textContent = `🪁 DAR TAPA (${this.launchTapCount}/3)`;
+  }
+
+  _tapPlayerKite() {
+    if (!this.started || !this.characterMode || !this.playerKiteInHand || this.rabiolaLock) return false;
+
+    const now = this.elapsedTime;
+    let gap = now - this.lastLaunchTapAt;
+    if (this.launchTapCount > 0 && gap > 2.2) {
+      this.launchTapCount = 0;
+      this.launchTapQuality = 0;
+      gap = Infinity;
+    }
+    if (this.launchTapCount > 0 && gap < 0.26) return false;
+
+    const intervalQuality = this.launchTapCount === 0
+      ? 0.72
+      : THREE.MathUtils.clamp(1 - Math.abs(gap - 0.58) / 0.7, 0.28, 1);
+    const runBonus = THREE.MathUtils.clamp(this.characterMoveSpeed / 8.2, 0, 1);
+    const tapQuality = THREE.MathUtils.clamp(intervalQuality * 0.72 + runBonus * 0.28, 0.25, 1);
+    this.launchTapQuality = (this.launchTapQuality * this.launchTapCount + tapQuality) / (this.launchTapCount + 1);
+    this.launchTapCount += 1;
+    this.lastLaunchTapAt = now;
+
+    this.sound.playLaunchTap(this.playerConfig.modelId, this.characterMoveSpeed, this.launchTapCount);
+    this.carretilha.triggerSocada(0.18 + runBonus * 0.12);
+    this._syncLaunchButton();
+
+    if (this.launchTapCount >= 3) {
+      this._launchPlayerKite(this.launchTapQuality);
+      return true;
+    }
+
+    const remaining = 3 - this.launchTapCount;
+    this.showBanner(`TAPA ${this.launchTapCount}/3`, remaining === 1
+      ? 'Mais um tapa no tempo certo para colocar a pipa no alto.'
+      : `Boa! Faltam ${remaining} tapas. Correr antes ajuda a ganhar altura.`, 'normal');
+    this._updateHeldPlayerKite(0.016);
+    return true;
+  }
+
+  _launchPlayerKite(launchQuality = this.launchTapQuality) {
+    if (!this.started || !this.playerKiteInHand || this.launchTapCount < 3) return false;
     const avatar = this.world.playerAvatar;
     const runSpeed = THREE.MathUtils.clamp(this.characterMoveSpeed, 0, 8.2);
     const forward = _launchForward.set(0, 0, 1).applyQuaternion(avatar.quaternion).normalize();
@@ -257,13 +316,14 @@ class Pipa3DGame {
     this.playerKite.tension = 0.24;
     this.playerKite.noseAngle = 0;
     this.playerKite.angularVel = 0;
-    this.playerKite.socadaBoost = 0.12;
+    const launchPower = THREE.MathUtils.clamp(launchQuality, 0.25, 1);
+    this.playerKite.socadaBoost = 0.08 + launchPower * 0.12;
     this.playerKite.disqueBoost = 0;
     this.playerKite.disbicarBoost = 0;
-    this.playerKite.position.addScaledVector(forward, 1.15);
-    this.playerKite.position.y += 0.42;
-    this.playerKite.velocity.copy(forward).multiplyScalar(2.4 + runSpeed * 0.72);
-    this.playerKite.velocity.y += 1.25 + runSpeed * 0.30;
+    this.playerKite.position.addScaledVector(forward, 0.9 + launchPower * 0.35);
+    this.playerKite.position.y += 0.18 + launchPower * 0.3;
+    this.playerKite.velocity.copy(forward).multiplyScalar(1.9 + runSpeed * 0.76 + launchPower * 0.45);
+    this.playerKite.velocity.y += 0.72 + runSpeed * 0.28 + launchPower * 0.55;
     this.playerKite.velocity.addScaledVector(this.windVec, 0.16);
     this.playerKite._updateOrientation(this.windVec);
     this.playerKite.visual.update({
@@ -290,10 +350,14 @@ class Pipa3DGame {
     this.camModeIdx = this.cameraModes.findIndex((camera) => camera.id === (this.selectedMap === 'laje' ? 'laje' : 'aerea'));
     document.getElementById('label-camera').textContent = this.cameraModes[this.camModeIdx].label;
     document.getElementById('label-explore').textContent = 'Explorar';
-    this.sound.playSocada(0.45);
-    this.showBanner('PIPA SOLTA!', runSpeed >= 6
-      ? 'Boa corrida! Agora puxe a linha e dê socadas para ganhar altura.'
-      : 'Lançamento leve. Segure W e dê toques no ESPAÇO para ganhar altura.', 'normal');
+    this.sound.playLaunchRelease(this.playerConfig.modelId, launchPower);
+    this.launchTapCount = 0;
+    this.launchTapQuality = 0;
+    this._syncLaunchButton();
+    this.showBanner('PIPA NO ALTO!', runSpeed >= 6
+      ? 'Boa corrida e bons tapas! Agora controle a linha para ganhar altura.'
+      : 'A pipa está no ar. Puxe a linha e use socadas para ganhar altura.', 'normal');
+    return true;
   }
 
   _onResize() {
@@ -386,6 +450,9 @@ class Pipa3DGame {
     document.getElementById('btn-relaunch').addEventListener('click', () => {
       this.relaunchPlayerKite();
     });
+    document.getElementById('btn-rabiola-lockpick')?.addEventListener('click', () => {
+      this._attemptRabiolaLockpick();
+    });
 
     // Zen wind slider
     const zenSlider = document.getElementById('slider-zen-wind');
@@ -471,17 +538,18 @@ class Pipa3DGame {
       this.startGame();
       return;
     }
+    if (this.rabiolaLock) return;
     if (this.playerKiteInHand) {
-      this.showBanner('PIPA NA MÃO', 'Caminhe ou corra e pressione E para soltar a pipa.', 'normal');
+      this.showBanner('PIPA NA MÃO', 'Caminhe ou corra e dê três tapas com ESPAÇO ou E para colocar a pipa no alto.', 'normal');
       return;
     }
     this._preparePlayerKiteInHand();
     this._enterPreLaunchMode();
-    this.showBanner('ESCOLHA O PONTO', 'Agora você está com a pipa na mão. Posicione-se e solte quando quiser.', 'normal');
+    this.showBanner('ESCOLHA O PONTO', 'Agora você está com a pipa na mão. Posicione-se e dê três tapas para lançar.', 'normal');
   }
 
   _updateCharacterMovement(dt) {
-    if (!this.characterMode) return;
+    if (!this.characterMode || this.rabiolaLock) return;
     const avatar = this.world.playerAvatar;
     const direction = new THREE.Vector3();
     if (this.keys['KeyW'] || this.keys['ArrowUp'] || this.touchMove.has('up')) direction.z -= 1;
@@ -513,6 +581,10 @@ class Pipa3DGame {
       parts.rightLeg.rotation.x = -swing;
       parts.leftArm.rotation.x = 0.85 - swing * 0.32;
       parts.rightArm.rotation.x = 1.05 + swing * 0.32;
+      const tapAge = this.elapsedTime - this.lastLaunchTapAt;
+      if (this.playerKiteInHand && tapAge >= 0 && tapAge < 0.28) {
+        parts.rightArm.rotation.x = 0.1 + Math.sin((tapAge / 0.28) * Math.PI) * 1.25;
+      }
     }
     this.carretilha.baseWorldPos.set(avatar.position.x, avatar.position.y + 1.12, avatar.position.z);
   }
@@ -1012,7 +1084,7 @@ class Pipa3DGame {
     document.getElementById('controls-guide').classList.remove('hud-hidden');
     if (!this.playerKiteInHand) this._preparePlayerKiteInHand();
     this._enterPreLaunchMode();
-    this.showBanner('PIPA NA MÃO', 'Caminhe ou corra pela laje e pressione E para soltar a pipa.', 'normal');
+    this.showBanner('PIPA NA MÃO', 'Caminhe ou corra e dê três tapas com ESPAÇO ou E para colocar a pipa no alto.', 'normal');
   }
 
   cycleCamera() {
@@ -1079,9 +1151,16 @@ class Pipa3DGame {
         }
       }
 
+      if (!wasPressed && this.started && this.rabiolaLock?.phase === 'lockpick'
+          && (code === 'Space' || code === 'Enter')) {
+        this._attemptRabiolaLockpick();
+        return;
+      }
+
       if (!wasPressed && this.started) {
         if (code === 'Space') {
-          this.triggerPlayerSocada(1.0);
+          if (this.characterMode && this.playerKiteInHand) this._tapPlayerKite();
+          else this.triggerPlayerSocada(1.0);
         } else if (code === 'KeyQ') {
           this.playerKite.triggerDisque(-1);
           this.sound.playSocada(0.85);
@@ -1101,7 +1180,7 @@ class Pipa3DGame {
         } else if (code === 'KeyV') {
           this.toggleCharacterMode();
         } else if (code === 'KeyE' && this.characterMode) {
-          this._launchPlayerKite();
+          this._tapPlayerKite();
         } else if (code === 'KeyO') {
           const modal = document.getElementById('oficina-modal');
           if (modal.classList.contains('hidden')) this.openOficina();
@@ -1256,11 +1335,33 @@ class Pipa3DGame {
       });
     }
     document.getElementById('touch-launch')?.addEventListener('click', () => {
-      if (this.characterMode) this._launchPlayerKite();
+      if (this.characterMode) this._tapPlayerKite();
     });
+
+    const reelButton = document.getElementById('btn-rabiola-reel');
+    if (reelButton) {
+      const startReel = (event) => {
+        event.preventDefault();
+        this.rabiolaReelHeld = true;
+        reelButton.classList.add('pressed');
+      };
+      const stopReel = () => {
+        this.rabiolaReelHeld = false;
+        reelButton.classList.remove('pressed');
+      };
+      reelButton.addEventListener('pointerdown', startReel);
+      reelButton.addEventListener('pointerup', stopReel);
+      reelButton.addEventListener('pointerleave', stopReel);
+      reelButton.addEventListener('pointercancel', stopReel);
+      window.addEventListener('pointerup', stopReel);
+    }
   }
 
   _gatherPlayerControls() {
+    if (this.rabiolaLock) {
+      this.previousReleaseHeld = false;
+      return { pull: false, release: false, quickRelease: false, steer: 0, largada: false };
+    }
     if (this.characterMode) { this.previousReleaseHeld = false; return { pull: false, release: false, quickRelease: false, steer: 0, largada: false }; }
     if (!this.started) {
       // Gentle scenic autopilot on title screen!
@@ -1311,6 +1412,152 @@ class Pipa3DGame {
     document.getElementById('pad-right')?.classList.toggle('pressed', steer > 0.2);
 
     return { pull, release, quickRelease, largada, steer };
+  }
+
+  _openRabiolaLock(driftingKite) {
+    this.rabiolaLock = {
+      kite: driftingKite,
+      phase: 'lockpick',
+      lock: createRabiolaLockState(driftingKite.modelId, this.elapsedTime),
+      reelProgress: 0
+    };
+    document.getElementById('rabiola-lock-title').textContent = `Desembarace a ${KITE_MODELS[driftingKite.modelId]?.name || 'pipa'}`;
+    document.getElementById('rabiola-lock-help').textContent =
+      'A rabiola prendeu na sua linha. Acerte a faixa verde para soltar cada volta sem deixar o nó apertar.';
+    document.getElementById('rabiola-lock-overlay').classList.remove('hidden');
+    document.getElementById('rabiola-lock-pick-phase').classList.remove('hidden');
+    document.getElementById('rabiola-lock-reel-phase').classList.add('hidden');
+    document.getElementById('rabiola-lock-status').textContent = 'Trava 1 de 5 · aperte quando a agulha passar no verde';
+    this._renderRabiolaLockPins();
+  }
+
+  _renderRabiolaLockPins() {
+    const session = this.rabiolaLock;
+    const pins = document.getElementById('rabiola-lock-pins');
+    if (!session || !pins) return;
+    pins.innerHTML = Array.from({ length: 5 }, (_, index) =>
+      `<span class="rabiola-lock-pin ${index < session.lock.stage ? 'done' : ''}"></span>`
+    ).join('');
+  }
+
+  _attemptRabiolaLockpick() {
+    const session = this.rabiolaLock;
+    if (!session || session.phase !== 'lockpick') return false;
+    const result = attemptRabiolaLock(session.lock, this.elapsedTime);
+    session.lock = result.state;
+    this.sound.playWoodTick(result.hit ? 0.13 : 0.075);
+
+    if (result.hit) {
+      document.getElementById('rabiola-lock-status').textContent = result.complete
+        ? 'NÓ DESFEITO! Agora puxe a pipa até você.'
+        : `Volta solta! Trava ${result.state.stage + 1} de 5.`;
+    } else {
+      document.getElementById('rabiola-lock-status').textContent =
+        `Puxão fora do ponto · erro ${result.state.mistakes}/3. Espere a próxima passagem verde.`;
+    }
+    this._renderRabiolaLockPins();
+
+    if (result.failed) {
+      this._failRabiolaRecovery();
+    } else if (result.complete) {
+      this._beginRabiolaReel();
+    }
+    return result.hit;
+  }
+
+  _beginRabiolaReel() {
+    const session = this.rabiolaLock;
+    if (!session) return;
+    session.phase = 'reel';
+    session.reelProgress = 0;
+    session.kite.snagged = false;
+    session.kite.recovering = true;
+    document.getElementById('rabiola-lock-pick-phase').classList.add('hidden');
+    document.getElementById('rabiola-lock-reel-phase').classList.remove('hidden');
+    document.getElementById('rabiola-lock-title').textContent = 'Agora recolha a pipa';
+    document.getElementById('rabiola-lock-help').textContent =
+      'A rabiola está desembolada. A pipa continua no alto: segure W ou o botão para trazer ela até o pipeiro.';
+    document.getElementById('rabiola-reel-status').textContent =
+      `${KITE_MODELS[session.kite.modelId]?.name || 'Pipa'} solta da linha. Puxe aos poucos para não perder o controle.`;
+    this.sound.playWoodTick(0.16);
+  }
+
+  _updateRabiolaRecovery(dt) {
+    const session = this.rabiolaLock;
+    if (!session) return;
+
+    if (session.phase === 'lockpick') {
+      const reading = getRabiolaLockReading(session.lock, this.elapsedTime);
+      const zone = document.getElementById('rabiola-lock-zone');
+      const needle = document.getElementById('rabiola-lock-needle');
+      zone.style.left = `${(reading.target - reading.halfWindow) * 100}%`;
+      zone.style.width = `${reading.halfWindow * 200}%`;
+      needle.style.left = `${reading.cursor * 100}%`;
+      return;
+    }
+
+    const pulling = !!(
+      this.keys['KeyW'] || this.keys['ArrowUp'] || this.rabiolaReelHeld
+    );
+    if (pulling) {
+      session.reelProgress = Math.min(1, session.reelProgress + dt * 0.34);
+    }
+    session.kite.recoveryProgress = session.reelProgress;
+    _recoveryTarget.set(0.48, 1.54, -0.62)
+      .applyEuler(this.world.playerAvatar.rotation)
+      .add(this.world.playerAvatar.position);
+    session.kite.recoveryTarget.copy(_recoveryTarget);
+    document.getElementById('rabiola-reel-fill').style.width = `${session.reelProgress * 100}%`;
+    document.getElementById('rabiola-reel-status').textContent = pulling
+      ? 'Puxando a linha... continue segurando até a pipa chegar.'
+      : 'A pipa está parada no vento. Segure W ou o botão para recolher.';
+    if (session.reelProgress >= 1) this._completeRabiolaRecovery();
+  }
+
+  _failRabiolaRecovery() {
+    const session = this.rabiolaLock;
+    if (!session) return;
+    session.kite.snagged = false;
+    session.kite.recovering = false;
+    session.kite.velocity.copy(this.windVec).multiplyScalar(0.62);
+    session.kite.velocity.y -= 0.65;
+    this.rabiolaLock = null;
+    this.rabiolaReelHeld = false;
+    document.getElementById('rabiola-lock-overlay').classList.add('hidden');
+    this.sound.playSocada(0.42);
+    this.showBanner('A PIPA ESCAPOU!', 'O nó apertou e ela voltou a boiar no vento. Tente laçar a rabiola novamente.', 'danger');
+  }
+
+  _completeRabiolaRecovery() {
+    const session = this.rabiolaLock;
+    if (!session) return;
+    const recovered = session.kite;
+    const modelName = KITE_MODELS[recovered.modelId]?.name || 'pipa avoada';
+    recovered.alive = false;
+    this.rabiolaLock = null;
+    this.rabiolaReelHeld = false;
+    document.getElementById('rabiola-lock-overlay').classList.add('hidden');
+
+    // The recovered kite becomes the one in the pipeiro's hands. Nothing stays
+    // wrapped around the flying line, and it still needs three manual launch taps.
+    this.playerConfig.modelId = recovered.modelId;
+    this.playerConfig.patternId = recovered.patternId || this.playerConfig.patternId;
+    this.applyPlayerCustomization();
+    this._preparePlayerKiteInHand();
+    this._enterPreLaunchMode();
+
+    this.catches++;
+    this._recordProgress('catch');
+    const points = 250 * this.combo;
+    this.score += points;
+    this.combo = Math.min(8, this.combo + 1);
+    this.sound.playCatch();
+    this.effects.emitSparks(this.playerKite.position, 16, true);
+    this.showBanner(
+      'PIPA RESGATADA!',
+      `Você trouxe a ${modelName} até o pipeiro. Ela está na sua mão; dê três tapas para empinar. +${points} pts`,
+      'catch'
+    );
   }
 
   showBanner(tag, text, style = 'normal') {
@@ -1374,53 +1621,32 @@ class Pipa3DGame {
     let playerReloIntensity = 0;
     let playerReloSpeed = 0;
 
-    // 1. Aparar pipa voada: the catching line must physically touch the
-    // loose rabiola. Kite-body proximity and the cut-off string do not count.
-    for (const dk of this.driftingKites) {
-      if (!dk.alive || dk.age < 0.75) continue;
-      const tailCount = dk.visual?.activeTailNodes || 0;
-      if (tailCount < 5) continue;
-      const rabiolaNodes = dk.visual.tailNodes.slice(0, tailCount);
+    // A physical rabiola contact only starts the rescue challenge. The kite is
+    // not granted and no trophy-rabiola is attached to the player's line.
+    if (!this.rabiolaLock) {
+      for (const dk of this.driftingKites) {
+        if (!dk.alive || dk.snagged || dk.recovering || dk.age < 0.75) continue;
+        const tailCount = dk.visual?.activeTailNodes || 0;
+        if (tailCount < 5) continue;
+        const rabiolaNodes = dk.visual.tailNodes.slice(0, tailCount);
 
-      for (const k of activeKites) {
-        if (!k.active || !Array.isArray(k.stringNodes)) continue;
-        const capture = findRabiolaCapture(
-          k.stringNodes,
-          rabiolaNodes,
-          0.22,
-          2
-        );
-        if (!capture) continue;
+        for (const k of activeKites) {
+          if (!k.isPlayer || !k.active || !Array.isArray(k.stringNodes)) continue;
+          const capture = findRabiolaCapture(k.stringNodes, rabiolaNodes, 0.22, 2);
+          if (!capture) continue;
 
-        dk.alive = false;
-        this.effects.spawnCaughtRabiola({
-          ownerId: k.id,
-          lineU: capture.lineU,
-          sourceNodes: rabiolaNodes,
-          capturePoint: capture.linePoint,
-          primaryColor: dk.visual.spec.ribbonColor,
-          accentColor: dk.visual.spec.accentRibbonColor,
-          scale: dk.visual.spec.scale * dk.visual.group.scale.x
-        });
-        this.effects.emitSparks(capture.point, 18, true);
-
-        if (k.isPlayer) {
-          this.catches++;
-          this._recordProgress('catch');
-          const pts = 250 * this.combo;
-          this.score += pts;
-          this.combo = Math.min(8, this.combo + 1);
-          this.sound.playCatch();
-          const modelName = KITE_MODELS[dk.modelId]?.name || 'pipa avoada';
+          dk.snagged = true;
+          this.effects.emitSparks(capture.point, 10, true);
+          this._openRabiolaLock(dk);
+          this.sound.playWoodTick(0.12);
           this.showBanner(
-            'APAROU NA RABIOLA!',
-            `Você laçou a rabiola da ${modelName} na sua linha! +${pts} pts`,
-            'catch'
+            'RABIOLA ENROLADA!',
+            'A pipa ainda está avoada. Desembarace as voltas para começar a recolher.',
+            'normal'
           );
-        } else {
-          this.showBanner('XEPA AÉREA', `${k.name} laçou uma rabiola no alto!`, 'normal');
+          break;
         }
-        break;
+        if (this.rabiolaLock) break;
       }
     }
 
@@ -1909,6 +2135,8 @@ class Pipa3DGame {
     this.elapsedTime += dt;
     const elapsed = this.elapsedTime;
 
+    this._updateRabiolaRecovery(dt);
+
     // 1. Update wind, scene and character exploration.
     this._updateWind(elapsed);
     this._updateCharacterMovement(dt);
@@ -2025,7 +2253,15 @@ class Pipa3DGame {
       reloIntensity: combatInfo.reloIntensity,
       reloSpeed: combatInfo.reloSpeed,
       kiteModelId: this.playerConfig.modelId,
-      kiteActive: this.playerKite.active,
+      kiteActive: this.playerKite.active || this.playerKiteInHand,
+      airborneKites: [
+        ...(this.playerKite.active || this.playerKiteInHand
+          ? [{ modelId: this.playerConfig.modelId }]
+          : []),
+        ...this._getActiveRivals()
+          .filter((rival) => rival.kite.active)
+          .map((rival) => ({ modelId: rival.kite.visual?.spec?.id || 'murcha' }))
+      ],
       lineTension: this.playerKite.tension,
       dt
     });
@@ -2059,3 +2295,4 @@ const _lookAhead = new THREE.Vector3();
 const _heldKiteLocal = new THREE.Vector3(0.48, 1.54, -0.62);
 const _heldKiteEuler = new THREE.Euler();
 const _launchForward = new THREE.Vector3();
+const _recoveryTarget = new THREE.Vector3();
