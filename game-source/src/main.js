@@ -860,6 +860,9 @@ class Pipa3DGame {
         btn.textContent = m.name;
         btn.addEventListener('click', () => {
           this.playerConfig.modelId = m.id;
+          if (m.id === 'raia') this.playerConfig.tailStyle = 'sem';
+          else if (this.playerConfig.tailStyle === 'sem') this.playerConfig.tailStyle = 'padrao';
+          document.querySelectorAll('#opt-tails .opt-chip').forEach((chip) => chip.classList.toggle('active', chip.dataset.tail === this.playerConfig.tailStyle));
           descEl.textContent = m.desc;
           this.applyPlayerCustomization();
           renderModels();
@@ -1271,6 +1274,16 @@ class Pipa3DGame {
           this.playerKite.triggerDisque(1);
           this.sound.playSocada(0.85);
           this._flashDeckBtn('act-disque-r');
+        } else if (code === 'KeyG' && !this.characterMode) {
+          if (this.playerKite.triggerSpin(Math.sign(this.padSteer) || (Math.sign(this.playerKite.noseAngle) || 1))) {
+            this.sound.playSocada(0.9);
+            this._flashDeckBtn('act-spin');
+          }
+        } else if (code === 'KeyF' && !this.characterMode) {
+          if (this.playerKite.triggerRetao()) {
+            this.sound.playSocada(1.0);
+            this._flashDeckBtn('act-retao');
+          }
         } else if (code === 'KeyB' && !this.characterMode) {
           const direction = Math.abs(this.padSteer) > 0.2 ? this.padSteer : (Math.sign(this.playerKite.noseAngle) || 1);
           if (this.playerKite.triggerDisbicar(direction)) {
@@ -1377,6 +1390,18 @@ class Pipa3DGame {
     bindHoldBtn('act-pull', () => { this.uiHold.pull = true; }, () => { this.uiHold.pull = false; });
     bindHoldBtn('act-release', () => { this.uiHold.release = true; }, () => { this.uiHold.release = false; });
     bindHoldBtn('act-release-fast', () => { this.uiHold.quickRelease = true; }, () => { this.uiHold.quickRelease = false; });
+    document.getElementById('act-spin')?.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); this.sound.init();
+      if (this.playerKite.triggerSpin(Math.sign(this.padSteer) || (Math.sign(this.playerKite.noseAngle) || 1))) {
+        this.sound.playSocada(0.9); this._flashDeckBtn('act-spin');
+      }
+    });
+    document.getElementById('act-retao')?.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); this.sound.init();
+      if (this.playerKite.triggerRetao()) {
+        this.sound.playSocada(1.0); this._flashDeckBtn('act-retao');
+      }
+    });
     document.getElementById('act-disbicar').addEventListener('pointerdown', (e) => {
       e.preventDefault();
       this.sound.init();
