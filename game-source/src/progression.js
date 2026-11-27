@@ -4,6 +4,10 @@ const KITE_IDS = [
   'murcha', 'raia', 'latao', 'peixinho', 'papagaio', 'delta',
   'estrela', 'hexagonal', 'peixao', 'capucheta', 'morcego', 'quadrada', 'rokkaku'
 ];
+const NEIGHBORHOOD_IDS = ['laje', 'praia', 'parque', 'campinho', 'morro'];
+const PAPER_TYPES = ['seda', 'leve', 'resistente'];
+const FRAME_TYPES = ['bambu', 'fibra', 'reforcada'];
+const TAIL_TYPES = ['padrao', 'longa', 'curta', 'sem'];
 
 const MISSION_TEMPLATES = [
   { id: 'first_cuts', title: 'Dono do céu', description: 'Faça 5 cortes', event: 'cut', target: 5, xp: 180, coins: 120 },
@@ -32,9 +36,12 @@ function createDefaultProfile() {
     xp: 0,
     coins: 250,
     ownedLines: [],
-    stats: { cuts: 0, catches: 0, tailCuts: 0, bestCombo: 1, games: 0, repairs: 0, flightSeconds: 0, combatWins: 0, bestCutStreak: 1 },
+    stats: { cuts: 0, catches: 0, tailCuts: 0, bestCombo: 1, games: 0, repairs: 0, flightSeconds: 0, combatWins: 0, bestCutStreak: 1, craftedKites: 0, tournamentWins: 0 },
     house: { level: 1, garageSlots: 3, visits: 0, ownedKites: ['murcha'], recoveredKites: [], decorations: [], kiteCondition: Object.fromEntries(KITE_IDS.map((id) => [id, 100])) },
     cutHistory: [],
+    craftLog: [],
+    rivalries: [],
+    reputation: Object.fromEntries(NEIGHBORHOOD_IDS.map((id) => [id, 0])),
     missions: MISSION_TEMPLATES.map((mission) => ({ id: mission.id, progress: 0, claimed: false }))
   };
 }
@@ -61,7 +68,9 @@ function normalizeProfile(value) {
       repairs: n(value.stats?.repairs, 0),
       flightSeconds: n(value.stats?.flightSeconds, 0),
       combatWins: n(value.stats?.combatWins, 0),
-      bestCutStreak: Math.max(1, n(value.stats?.bestCutStreak, 1, 999))
+      bestCutStreak: Math.max(1, n(value.stats?.bestCutStreak, 1, 999)),
+      craftedKites: n(value.stats?.craftedKites, 0),
+      tournamentWins: n(value.stats?.tournamentWins, 0)
     },
     house: {
       level: Math.max(1, Math.min(3, n(value.house?.level, 1, 3))),
@@ -79,6 +88,19 @@ function normalizeProfile(value) {
       combo: Math.max(1, n(entry?.combo, 1, 999)),
       at: n(entry?.at, Date.now())
     })),
+    craftLog: (Array.isArray(value.craftLog) ? value.craftLog : []).slice(0, 20).map((entry) => ({
+      modelId: KITE_IDS.includes(entry?.modelId) ? entry.modelId : 'murcha',
+      paper: PAPER_TYPES.includes(entry?.paper) ? entry.paper : 'seda',
+      frame: FRAME_TYPES.includes(entry?.frame) ? entry.frame : 'bambu',
+      tail: TAIL_TYPES.includes(entry?.tail) ? entry.tail : 'padrao',
+      quality: n(entry?.quality, 55, 100), at: n(entry?.at, Date.now())
+    })),
+    rivalries: (Array.isArray(value.rivalries) ? value.rivalries : []).slice(0, 20).map((entry) => ({
+      name: String(entry?.name || 'Pipeiro').replace(/[<>]/g, '').slice(0, 32),
+      playerCuts: n(entry?.playerCuts, 0, 999), playerLosses: n(entry?.playerLosses, 0, 999),
+      heat: Math.max(0, Math.min(10, Number(entry?.heat) || 0))
+    })),
+    reputation: Object.fromEntries(NEIGHBORHOOD_IDS.map((id) => [id, n(value.reputation?.[id], 0, 100000)])),
     missions: MISSION_TEMPLATES.map((mission) => {
       const saved = savedMissions.get(mission.id) || {};
       return {
@@ -234,6 +256,86 @@ export class ProgressionStore {
     return true;
   }
 
+  recordReputation(mapId, amount = 5) {
+    if (!NEIGHBORHOOD_IDS.includes(mapId)) return 0;
+    const points = Math.max(0, Math.min(250, Math.floor(Number(amount) || 0)));
+    this.profile.reputation[mapId] = Math.min(100000, (this.profile.reputation[mapId] || 0) + points);
+    this.save();
+    return this.profile.reputation[mapId];
+  }
+
+  getNeighborhoodRank(mapId) {
+    const points = this.profile.reputation[mapId] || 0;
+    if (points >= 1200) return { title: 'Lenda do bairro', next: 1200, progress: 100 };
+    if (points >= 600) return { title: 'Conhecido na quebrada', next: 1200, progress: (points - 600) / 600 * 100 };
+    if (points >= 250) return { title: 'Pipeiro respeitado', next: 600, progress: (points - 250) / 350 * 100 };
+    if (points >= 75) return { title: 'Nome conhecido', next: 250, progress: (points - 75) / 175 * 100 };
+    return { title: 'Chegando agora', next: 75, progress: points / 75 * 100 };
+  }
+
+  getNeighborhoods() {
+    const names = { laje: 'Laje do Bairro', praia: 'Praia', parque: 'Parque', campinho: 'Campinho', morro: 'Mirante do Morro' };
+    return NEIGHBORHOOD_IDS.map((id) => ({ id, name: names[id], points: this.profile.reputation[id] || 0, ...this.getNeighborhoodRank(id) }));
+  }
+
+  recordTournamentRound(mapId) {
+    this.profile.stats.tournamentWins += 1;
+    this.recordReputation(mapId, 24);
+    const xpEarned = 90, baseCoins = 150;
+    this.profile.xp += xpEarned;
+    this.profile.coins += baseCoins;
+    let levelsGained = 0;
+    while (this.profile.xp >= this.xpForNextLevel && this.profile.level < 999) {
+      this.profile.xp -= this.xpForNextLevel;
+      this.profile.level += 1;
+      levelsGained += 1;
+      this.profile.coins += 75;
+    }
+    this.save();
+    return { xpEarned, coinsEarned: baseCoins + levelsGained * 75, levelsGained, wins: this.profile.stats.tournamentWins };
+  }
+
+  recordRivalry(name, outcome = 'win') {
+    const cleanName = String(name || 'Pipeiro').replace(/[<>]/g, '').trim().slice(0, 32) || 'Pipeiro';
+    let entry = this.profile.rivalries.find((item) => item.name === cleanName);
+    if (!entry) {
+      entry = { name: cleanName, playerCuts: 0, playerLosses: 0, heat: 0 };
+      this.profile.rivalries.unshift(entry);
+    }
+    if (outcome === 'loss') entry.playerLosses += 1;
+    else entry.playerCuts += 1;
+    entry.heat = Math.min(10, entry.heat + 1);
+    this.profile.rivalries = this.profile.rivalries.slice(0, 20);
+    this.save();
+    return { ...entry };
+  }
+
+  getRivalry(name) {
+    const entry = this.profile.rivalries.find((item) => item.name === String(name || '').slice(0, 32));
+    return entry ? { ...entry } : { name: String(name || 'Pipeiro'), playerCuts: 0, playerLosses: 0, heat: 0 };
+  }
+
+  craftKite({ modelId, paper = 'seda', frame = 'bambu', tail = 'padrao' } = {}) {
+    if (!KITE_IDS.includes(modelId)) return { ok: false, reason: 'Escolha um modelo válido para fabricar.' };
+    if (!PAPER_TYPES.includes(paper) || !FRAME_TYPES.includes(frame) || !TAIL_TYPES.includes(tail)) return { ok: false, reason: 'Confira os materiais escolhidos.' };
+    const cost = 140 + ({ seda: 0, leve: 35, resistente: 55 }[paper]) + ({ bambu: 0, fibra: 45, reforcada: 70 }[frame]) + ({ padrao: 0, longa: 12, curta: 12, sem: 0 }[tail]);
+    if (this.profile.coins < cost) return { ok: false, reason: `Faltam ${cost - this.profile.coins} moedas para comprar os materiais.` };
+    const quality = Math.min(100, 58 + ({ seda: 8, leve: 11, resistente: 15 }[paper]) + ({ bambu: 8, fibra: 14, reforcada: 18 }[frame]) + (tail === 'padrao' ? 4 : tail === 'longa' ? 2 : 0));
+    this.profile.coins -= cost;
+    this.profile.stats.craftedKites += 1;
+    this.profile.house.kiteCondition[modelId] = 100;
+    this.discoverKite(modelId);
+    this.profile.craftLog.unshift({ modelId, paper, frame, tail, quality, at: Date.now() });
+    this.profile.craftLog = this.profile.craftLog.slice(0, 20);
+    this.profile.xp += 35;
+    let levelsGained = 0;
+    while (this.profile.xp >= this.xpForNextLevel && this.profile.level < 999) {
+      this.profile.xp -= this.xpForNextLevel; this.profile.level += 1; levelsGained += 1; this.profile.coins += 75;
+    }
+    this.save();
+    return { ok: true, cost, quality, levelsGained, modelId, paper, frame, tail };
+  }
+
   recordCombat({ opponent, technique, points = 0, combo = 1 } = {}) {
     const clean = (value, fallback) => String(value || fallback).replace(/[<>]/g, '').trim().slice(0, 32) || fallback;
     const streak = Math.max(1, Math.min(999, Math.floor(Number(combo) || 1)));
@@ -262,7 +364,10 @@ export class ProgressionStore {
       { id: 'rabico', title: 'Corta-rabiola', description: 'Corte 5 rabiolas.', icon: '〰️', unlocked: stats.tailCuts >= 5 },
       { id: 'combo', title: 'Sequência braba', description: 'Alcance um combo de 5.', icon: '🔥', unlocked: stats.bestCombo >= 5 },
       { id: 'home', title: 'Minha quebrada', description: 'Amplie sua casa pela primeira vez.', icon: '🏠', unlocked: house.level >= 2 },
-      { id: 'champion', title: 'Lenda da laje', description: 'Consiga 25 cortes.', icon: '🏆', unlocked: stats.cuts >= 25 }
+      { id: 'champion', title: 'Lenda da laje', description: 'Consiga 25 cortes.', icon: '🏆', unlocked: stats.cuts >= 25 },
+      { id: 'craft', title: 'Mestre artesão', description: 'Fabrique 3 pipas na oficina.', icon: '🛠️', unlocked: stats.craftedKites >= 3 },
+      { id: 'tournament', title: 'Campeão de rodadas', description: 'Vença 3 rodadas de campeonato.', icon: '🥇', unlocked: stats.tournamentWins >= 3 },
+      { id: 'rival', title: 'Rivalidade histórica', description: 'Enfrente um rival pelo menos 5 vezes.', icon: '⚔️', unlocked: this.profile.rivalries.some((item) => item.playerCuts + item.playerLosses >= 5) }
     ];
   }
 

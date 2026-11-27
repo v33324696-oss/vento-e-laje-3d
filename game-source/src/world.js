@@ -67,7 +67,7 @@ export const WEATHER_PRESETS = {
   },
   nublado: {
     id: 'nublado',
-    name: 'Céu Nublado (16h20)',
+    name: 'Céu Nublado',
     zenithColor: 0x334155,
     midSkyColor: 0x64748b,
     horizonColor: 0xcbd5e1,
@@ -84,7 +84,16 @@ export const WEATHER_PRESETS = {
     baseWind: 8.5,
     gustStrength: 2.1,
     cloudOpacity: 0.98,
-    cloudDrift: 0.62
+    cloudDrift: 0.62,
+    cloudiness: 0.78
+  },
+  chuva: {
+    id: 'chuva', name: 'Chuva fraca',
+    zenithColor: 0x1e293b, midSkyColor: 0x475569, horizonColor: 0x94a3b8,
+    sunGlowColor: 0xcbd5e1, elevation: 18, azimuth: 132, sunColor: 0xcbd5e1,
+    sunIntensity: 0.72, hemiSky: 0x64748b, hemiGround: 0x334155, hemiIntensity: 0.62,
+    fogColor: 0x64748b, fogDensity: 0.0018, baseWind: 7.2, gustStrength: 2.8,
+    cloudOpacity: 1, cloudDrift: 0.82, cloudiness: 1
   }
 };
 
@@ -98,8 +107,13 @@ export class GameWorld {
     this.birds = [];
     this.swayingTrees = [];
     this.ambientPeople = [];
+    this.ambientVehicles = [];
+    this.ambientDogs = [];
     this.cloudMaterial = null;
-    this.windRibbonNodes = [];
+    this.rainPoints = null;
+    this.rainPositions = null;
+    this.timeOfDay = 15.5;
+    this.timeRate = 0.004;
     this.currentPreset = WEATHER_PRESETS.tarde;
     this.mapId = 'laje';
 
@@ -114,6 +128,7 @@ export class GameWorld {
     this._lajeRivalSpots = this.rivalSpots.map((spot) => ({ name: spot.name, anchor: spot.anchor.clone() }));
     this.mapGroups = {};
     this._buildAlternativeMaps();
+    this._buildHomeInterior();
     this.playerSpawn = this.getPlayerSpawn();
     this.applyWeather('tarde');
   }
@@ -216,6 +231,58 @@ export class GameWorld {
     this.scene.fog.color.setHex(p.fogColor);
     this.scene.fog.density = p.fogDensity;
     if (this.cloudMaterial) this.cloudMaterial.opacity = p.cloudOpacity ?? 0.9;
+    if (this.rainPoints) this.rainPoints.visible = p.id === 'chuva';
+  }
+
+  getClockLabel() {
+    const hour = Math.floor(this.timeOfDay) % 24;
+    const minute = Math.floor((this.timeOfDay - Math.floor(this.timeOfDay)) * 60);
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  }
+
+  cycleTimeSpeed() {
+    const rates = [0.004, 0.012, 0];
+    const labels = ['1×', '3×', 'Pausado'];
+    let index = rates.findIndex((rate) => Math.abs(rate - this.timeRate) < 0.00001);
+    index = (index + 1) % rates.length;
+    this.timeRate = rates[index];
+    return labels[index];
+  }
+
+  _updateDynamicDayCycle(dt) {
+    this.timeOfDay = (this.timeOfDay + Math.max(0, dt) * this.timeRate) % 24;
+    const keys = [
+      { h: 0, zen: 0x020617, mid: 0x0f172a, horizon: 0x1e293b, glow: 0x64748b, light: 0.10, elevation: -12 },
+      { h: 5, zen: 0x172554, mid: 0x334155, horizon: 0x64748b, glow: 0xf59e0b, light: 0.22, elevation: -2 },
+      { h: 7, zen: 0x075985, mid: 0x38bdf8, horizon: 0xfde68a, glow: 0xfff7d6, light: 1.35, elevation: 18 },
+      { h: 12, zen: 0x0369a1, mid: 0x38bdf8, horizon: 0xbae6fd, glow: 0xfffbeb, light: 2.15, elevation: 62 },
+      { h: 17, zen: 0x7c2d12, mid: 0xfb923c, horizon: 0xfed7aa, glow: 0xfef3c7, light: 1.55, elevation: 12 },
+      { h: 20, zen: 0x1e1b4b, mid: 0x312e81, horizon: 0x475569, glow: 0xf97316, light: 0.28, elevation: -6 },
+      { h: 24, zen: 0x020617, mid: 0x0f172a, horizon: 0x1e293b, glow: 0x64748b, light: 0.10, elevation: -12 }
+    ];
+    const hour = this.timeOfDay;
+    let next = 1;
+    while (next < keys.length - 1 && hour > keys[next].h) next += 1;
+    const a = keys[next - 1], b = keys[next];
+    const t = THREE.MathUtils.clamp((hour - a.h) / Math.max(0.001, b.h - a.h), 0, 1);
+    const smooth = t * t * (3 - 2 * t);
+    const color = (hexA, hexB, target) => target.lerpColors(_colorA.setHex(hexA), _colorB.setHex(hexB), smooth);
+    const cloudiness = this.currentPreset.cloudiness ?? 0.12;
+    color(a.zen, b.zen, this.skyUniforms.uZenith.value);
+    color(a.mid, b.mid, this.skyUniforms.uMidSky.value);
+    color(a.horizon, b.horizon, this.skyUniforms.uHorizon.value);
+    color(a.glow, b.glow, this.skyUniforms.uSunGlow.value);
+    const elevation = THREE.MathUtils.lerp(a.elevation, b.elevation, smooth);
+    const phi = THREE.MathUtils.degToRad(90 - elevation);
+    this.sunDir.setFromSphericalCoords(1, phi, THREE.MathUtils.degToRad(132)).normalize();
+    this.skyUniforms.uSunDir.value.copy(this.sunDir);
+    this.sunLight.position.copy(this.sunDir).multiplyScalar(135);
+    this.sunLight.intensity = THREE.MathUtils.lerp(a.light, b.light, smooth) * (1 - cloudiness * 0.48) * (this.currentPreset.id === 'chuva' ? 0.78 : 1);
+    this.sunLight.color.copy(_colorC.setHex(this.currentPreset.sunColor));
+    this.hemiLight.color.copy(this.skyUniforms.uMidSky.value);
+    this.hemiLight.intensity = THREE.MathUtils.lerp(0.42, 1.1, Math.max(0, this.sunLight.intensity / 2.2));
+    this.scene.fog.color.copy(this.skyUniforms.uHorizon.value);
+    this.scene.fog.density = (this.currentPreset.fogDensity || 0.0011) * (hour < 6 || hour > 19 ? 1.16 : 1);
   }
 
   getTerrainHeight(x, z) {
@@ -495,13 +562,13 @@ export class GameWorld {
   }
 
   getPlayerSpawn() {
-    return this.mapId === 'laje'
-      ? new THREE.Vector3(0, 9.74, 13.9)
-      : new THREE.Vector3(0, this.getTerrainHeight(0, 10), 10);
+    if (this.mapId === 'laje') return new THREE.Vector3(0, 9.74, 13.9);
+    if (this.mapId === 'casa') return new THREE.Vector3(-3.2, 0.02, 6.5);
+    return new THREE.Vector3(0, this.getTerrainHeight(0, 10), 10);
   }
 
   setMap(mapId) {
-    const valid = ['laje', 'praia', 'parque', 'campinho', 'morro'];
+    const valid = ['laje', 'praia', 'parque', 'campinho', 'morro', 'casa'];
     this.mapId = valid.includes(mapId) ? mapId : 'laje';
     const alwaysVisible = new Set([this.sky, this.hemiLight, this.bounceLight, this.sunLight, this.playerAvatar]);
     for (const child of this._baseMapChildren) {
@@ -511,6 +578,8 @@ export class GameWorld {
 
     if (this.mapId === 'laje') {
       this.rivalSpots = this._lajeRivalSpots.map((spot) => ({ name: spot.name, anchor: spot.anchor.clone() }));
+    } else if (this.mapId === 'casa') {
+      this.rivalSpots = [];
     } else {
       const anchorY = this.getTerrainHeight(0, 0) + 1.55;
       const positions = [[-24,-18],[24,-18],[-30,4],[30,4],[-18,24],[18,24]];
@@ -855,6 +924,40 @@ export class GameWorld {
     streetPeople.forEach(([x, z, shirt], index) => {
       this._addAmbientWalker(this.scene, x, z, shirt, index * 1.17, 1.15 + (index % 2) * 0.45, 0.48 + (index % 3) * 0.09, 'laje');
     });
+
+    const makeCar = (paintHex, startX, speed, roadZ) => {
+      const group = new THREE.Group();
+      const paint = new THREE.MeshStandardMaterial({ color: paintHex, roughness: 0.56, metalness: 0.12 });
+      const glass = new THREE.MeshStandardMaterial({ color: 0x93c5fd, roughness: 0.25, metalness: 0.22 });
+      const tire = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.95 });
+      const body = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.72, 1.55), paint); body.position.y = 0.7; group.add(body);
+      const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.72, 1.32), glass); cabin.position.set(-0.15, 1.34, 0); group.add(cabin);
+      for (const x of [-1.1, 1.1]) for (const zSide of [-0.78, 0.78]) {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.18, 12), tire);
+        wheel.rotation.z = Math.PI / 2; wheel.position.set(x, 0.36, zSide); group.add(wheel);
+      }
+      group.position.set(startX, this.getTerrainHeight(startX, roadZ) + 0.02, roadZ); this.scene.add(group);
+      this.ambientVehicles.push({ group, speed, roadZ });
+    };
+    makeCar(0xef4444, -58, 5.2, 2.5);
+    makeCar(0x2563eb, 42, -4.4, -4.8);
+
+    const makeDog = (x, z, coatHex, phase) => {
+      const group = new THREE.Group();
+      const coat = new THREE.MeshStandardMaterial({ color: coatHex, roughness: 0.92 });
+      const dark = new THREE.MeshStandardMaterial({ color: 0x292524, roughness: 0.9 });
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.42, 0.34), coat); body.position.y = 0.47; group.add(body);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 8), coat); head.position.set(0.48, 0.64, 0); group.add(head);
+      const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.07, 0.38, 6), coat); tail.position.set(-0.52, 0.68, 0); tail.rotation.z = -0.8; group.add(tail);
+      const legs = [];
+      for (const xLeg of [-0.28, 0.28]) for (const zLeg of [-0.12, 0.12]) {
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.045, 0.34, 6), dark); leg.position.set(xLeg, 0.22, zLeg); group.add(leg); legs.push(leg);
+      }
+      group.position.set(x, this.getTerrainHeight(x, z), z); this.scene.add(group);
+      this.ambientDogs.push({ group, x, z, phase, legs });
+    };
+    makeDog(-26, 7.5, 0xd6b48a, 0.2);
+    makeDog(34, -18, 0x8b7355, 1.7);
   }
 
   _buildCloudsAndBirds() {
@@ -913,12 +1016,66 @@ export class GameWorld {
         speed: 0.32 + Math.random() * 0.25
       });
     }
+    const rainCount = 420;
+    this.rainPositions = new Float32Array(rainCount * 3);
+    for (let i = 0; i < rainCount; i++) {
+      this.rainPositions[i * 3] = (Math.random() - 0.5) * 150;
+      this.rainPositions[i * 3 + 1] = Math.random() * 65;
+      this.rainPositions[i * 3 + 2] = -50 + (Math.random() - 0.5) * 150;
+    }
+    const rainGeometry = new THREE.BufferGeometry();
+    rainGeometry.setAttribute('position', new THREE.BufferAttribute(this.rainPositions, 3));
+    const rainMaterial = new THREE.PointsMaterial({ color: 0xcbd5e1, size: 0.075, transparent: true, opacity: 0.72, depthWrite: false });
+    this.rainPoints = new THREE.Points(rainGeometry, rainMaterial);
+    this.rainPoints.visible = false;
+    this.scene.add(this.rainPoints);
+  }
+
+  _buildHomeInterior() {
+    const group = new THREE.Group();
+    const wall = new THREE.MeshStandardMaterial({ color: 0xe7d8bd, roughness: 0.94 });
+    const floor = new THREE.MeshStandardMaterial({ color: 0x8b8174, roughness: 0.96 });
+    const wood = new THREE.MeshStandardMaterial({ color: 0x765037, roughness: 0.88 });
+    const darkWood = new THREE.MeshStandardMaterial({ color: 0x402b20, roughness: 0.9 });
+    const metal = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.45, roughness: 0.6 });
+    const blue = new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.8 });
+    const tile = new THREE.Mesh(new THREE.BoxGeometry(28, 0.22, 20), floor); tile.position.y = -0.12; group.add(tile);
+    const addWall = (width, height, depth, x, y, z) => { const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), wall); mesh.position.set(x, y, z); mesh.castShadow = true; group.add(mesh); };
+    addWall(28, 3.5, 0.35, 0, 1.65, -10); addWall(0.35, 3.5, 20, -14, 1.65, 0); addWall(0.35, 3.5, 20, 14, 1.65, 0);
+    addWall(9, 3.5, 0.35, -9.5, 1.65, 10); addWall(9, 3.5, 0.35, 9.5, 1.65, 10); addWall(0.2, 3.5, 11, 2, 1.65, -4.5);
+    const counter = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.92, 1.2), wood); counter.position.set(-8.2, 0.46, -7.9); group.add(counter);
+    const table = new THREE.Mesh(new THREE.BoxGeometry(3.3, 0.18, 1.8), wood); table.position.set(-7, 0.95, -1.8); group.add(table);
+    for (const x of [-8.3, -5.7]) for (const z of [-2.4, -1.2]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.88, 0.14), darkWood); leg.position.set(x, 0.48, z); group.add(leg); }
+    const sofa = new THREE.Mesh(new THREE.BoxGeometry(4.8, 0.8, 1.45), blue); sofa.position.set(7.7, 0.55, 4.7); group.add(sofa);
+    const sofaBack = new THREE.Mesh(new THREE.BoxGeometry(4.8, 1.1, 0.35), blue); sofaBack.position.set(7.7, 1.15, 5.3); group.add(sofaBack);
+    const tv = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.45, 0.18), metal); tv.position.set(7.6, 1.7, -8.8); group.add(tv);
+    const tvStand = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.65, 0.8), darkWood); tvStand.position.set(7.6, 0.38, -8.4); group.add(tvStand);
+    const bench = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.22, 1.25), wood); bench.position.set(-7.8, 1.1, 5.1); group.add(bench);
+    for (const x of [-10.2, -5.4]) for (const z of [4.7, 5.5]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.15, 0.16), metal); leg.position.set(x, 0.55, z); group.add(leg); }
+    const shelf = new THREE.Group();
+    for (const y of [1.0, 2.05, 3.1]) { const plank = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.13, 0.5), wood); plank.position.y = y; shelf.add(plank); }
+    shelf.position.set(-11.8, 0, -4.2); group.add(shelf);
+    for (let i = 0; i < 4; i++) { const spool = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.23, 0.42, 12), metal); spool.rotation.z = Math.PI / 2; spool.position.set(-9.7 + i * 0.68, 1.42, 4.7); group.add(spool); }
+    this.homeDecorationGroup = new THREE.Group(); group.add(this.homeDecorationGroup);
+    this.homeBaseMaterials = { wood, metal };
+    group.visible = false; this.mapGroups.casa = group; this.scene.add(group);
+  }
+
+  setHomeDecorations(ids = []) {
+    if (!this.homeDecorationGroup) return;
+    this.homeDecorationGroup.clear();
+    const add = (geometry, material, x, y, z, rotation = 0) => { const mesh = new THREE.Mesh(geometry, material); mesh.position.set(x, y, z); mesh.rotation.y = rotation; mesh.castShadow = true; this.homeDecorationGroup.add(mesh); };
+    if (ids.includes('bandeirolas')) [0xef4444, 0xfacc15, 0x22c55e, 0x3b82f6, 0xa855f7].forEach((color, i) => add(new THREE.ConeGeometry(0.34, 0.72, 3), new THREE.MeshStandardMaterial({ color, side: THREE.DoubleSide }), -5.4 + i * 1.1, 3.05 - Math.abs(i - 2) * 0.08, -9.45, Math.PI));
+    if (ids.includes('trofeu_copa')) { add(new THREE.CylinderGeometry(0.18, 0.22, 0.22, 12), this.homeBaseMaterials.metal, -7.8, 1.34, 5.1); add(new THREE.CylinderGeometry(0.25, 0.12, 0.62, 12), new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.72, roughness: 0.25 }), -7.8, 1.73, 5.1); }
+    if (ids.includes('prateleira')) [0x38bdf8, 0xef4444, 0x22c55e].forEach((color, i) => add(new THREE.ConeGeometry(0.42, 1.0, 3), new THREE.MeshStandardMaterial({ color, side: THREE.DoubleSide }), -11.8, 1.45 + i * 0.85, -4.18, Math.PI));
+    if (ids.includes('placa_lenda')) add(new THREE.BoxGeometry(3.2, 0.8, 0.12), this.homeBaseMaterials.wood, 8.2, 2.35, -9.72);
   }
 
   update(windVec, time, dt, showPlayerAvatar = false) {
     if (this.playerAvatar) {
       this.playerAvatar.visible = showPlayerAvatar;
     }
+    this._updateDynamicDayCycle(dt);
 
     // Drift clouds with wind; overcast weather moves them more slowly.
     const cloudDrift = this.currentPreset.cloudDrift ?? 1;
@@ -949,6 +1106,21 @@ export class GameWorld {
       t.crown.rotation.x = -0.025 * (windMag / 9);
     }
 
+    for (const vehicle of this.ambientVehicles) {
+      vehicle.group.position.x += vehicle.speed * dt;
+      if (vehicle.group.position.x > 90) vehicle.group.position.x = -90;
+      if (vehicle.group.position.x < -90) vehicle.group.position.x = 90;
+      vehicle.group.position.y = this.getTerrainHeight(vehicle.group.position.x, vehicle.roadZ) + 0.02;
+    }
+    for (const dog of this.ambientDogs) {
+      const phase = time * 0.62 + dog.phase;
+      dog.group.position.x = dog.x + Math.sin(phase) * 2.4;
+      dog.group.position.z = dog.z + Math.cos(phase * 0.7) * 1.2;
+      dog.group.rotation.y = Math.cos(phase) > 0 ? 0 : Math.PI;
+      dog.group.position.y = this.getTerrainHeight(dog.group.position.x, dog.group.position.z);
+      dog.legs.forEach((leg, index) => { leg.rotation.x = Math.sin(phase * 5 + (index % 2) * Math.PI) * 0.26; });
+    }
+
     // Animate the neighborhood residents with a restrained walking cycle.
     for (const person of this.ambientPeople) {
       const phase = time * person.speed + person.phase;
@@ -976,7 +1148,24 @@ export class GameWorld {
       this.windRibbonPos[i * 3 + 2] = this.windPoleTip.z + dir.z * f;
     }
     this.windRibbonLine.geometry.attributes.position.needsUpdate = true;
+    if (this.rainPoints?.visible && this.rainPositions) {
+      const rain = this.rainPoints.geometry.attributes.position;
+      for (let i = 0; i < this.rainPositions.length; i += 3) {
+        this.rainPositions[i] += windVec.x * dt * 0.42;
+        this.rainPositions[i + 1] -= 33 * dt;
+        this.rainPositions[i + 2] += windVec.z * dt * 0.2;
+        if (this.rainPositions[i + 1] < 0) {
+          this.rainPositions[i + 1] = 48 + Math.random() * 30;
+          this.rainPositions[i] = (Math.random() - 0.5) * 150;
+          this.rainPositions[i + 2] = -50 + (Math.random() - 0.5) * 150;
+        }
+      }
+      rain.needsUpdate = true;
+    }
   }
 }
 
 const _wDir = new THREE.Vector3();
+const _colorA = new THREE.Color();
+const _colorB = new THREE.Color();
+const _colorC = new THREE.Color();

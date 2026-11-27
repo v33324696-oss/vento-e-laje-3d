@@ -41,6 +41,8 @@ export class RivalAIController {
     this.disqueTimer = 1.2 + Math.random() * 1.4;
     this.attackSide = Math.random() > 0.5 ? 1 : -1;
     this.approachCount = 0;
+    this.rivalryHeat = 0;
+    this.rivalryRememberedCuts = 0;
     this.respawnTimer = 0;
   }
 
@@ -53,6 +55,7 @@ export class RivalAIController {
     dt = 0.016
   }) {
     const skill = THREE.MathUtils.clamp((difficulty - 0.68) / 1.47, 0, 1);
+    this.rivalryHeat = Math.max(0, this.rivalryHeat - dt * 0.006);
     observeOpponentMemory(this.memory, playerKite, dt);
     if (!this.kite.active) {
       this.respawnTimer -= dt;
@@ -92,7 +95,8 @@ export class RivalAIController {
             : this.personality === 'slasher' ? 0.58
             : this.personality === 'trickster' ? 0.50 : 0.42;
           const memoryBonus = this.memory.confidence * (this.personality === 'hunter' ? 0.16 : 0.10);
-          const engagePlayerChance = Math.min(0.98, (personalityAggression + memoryBonus) * difficulty);
+          const rivalryBonus = Math.min(0.28, this.rivalryHeat * 0.12);
+          const engagePlayerChance = Math.min(0.98, (personalityAggression + memoryBonus + rivalryBonus) * difficulty);
 
           if (playerActive && Math.random() < engagePlayerChance) {
             this.focusesPlayer = true;
@@ -147,6 +151,7 @@ export class RivalAIController {
         const counter = this.memory.preferredSide * this.memory.confidence;
         this.targetPoint.x += counter * (this.personality === 'trickster' ? 4.2 : 2.4);
         if (this.personality === 'slasher') this.targetPoint.y += this.memory.pull * 0.18;
+        if (this.rivalryHeat > 0.15) this.targetPoint.lerp(playerKite.position, Math.min(0.24, this.rivalryHeat * 0.055));
       }
       this.targetPoint.y = THREE.MathUtils.clamp(this.targetPoint.y, 19, 46);
       this.targetPoint.z = THREE.MathUtils.clamp(this.targetPoint.z, -76, -22);
@@ -190,7 +195,8 @@ export class RivalAIController {
     if (this.kite.inRelo && gameMode !== 'zen') {
       // Tricksters try to escape and re-enter; harder settings turn that into
       // a timed largada instead of an endless passive release.
-      const evasiveChance = this.personality === 'trickster' ? 0.42 - skill * 0.22 : 0.035;
+      const threatened = this.kite.lineIntegrity < 0.38;
+      const evasiveChance = this.personality === 'trickster' ? 0.42 - skill * 0.22 : threatened ? 0.24 + (0.38 - this.kite.lineIntegrity) * 0.42 : 0.035;
       if (Math.random() < evasiveChance) {
         release = true;
         quickRelease = this.kite.reloContactTime > 0.14 && this.kite.tension > 0.38
@@ -239,10 +245,24 @@ export class RivalAIController {
     return { pull, release, quickRelease, steer, steerTarget: desiredAngle };
   }
 
+  onPlayerCut() {
+    this.rivalryHeat = Math.min(2.4, this.rivalryHeat + 0.85);
+    this.rivalryRememberedCuts += 1;
+    this.focusesPlayer = true;
+    this.retargetTimer = Math.min(this.retargetTimer, 0.25);
+  }
+
+  onPlayerVictory() {
+    this.rivalryHeat = Math.min(2.4, this.rivalryHeat + 0.7);
+    this.focusesPlayer = true;
+    this.retargetTimer = Math.min(this.retargetTimer, 0.25);
+  }
+
   onCut(respawnDelay = 4.2) {
     this.kite.active = false;
     this.kite.visual.setVisible(false);
     this.kite.lineMesh.visible = false;
+    this.rivalryHeat = Math.min(2.4, this.rivalryHeat + 0.12);
     this.respawnTimer = respawnDelay;
   }
 }
