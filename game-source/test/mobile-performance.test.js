@@ -17,7 +17,7 @@ test('mobile devices get a separate performance-first graphics preference', () =
 });
 
 test('resizing preserves the selected graphics profile', () => {
-  assert.match(mainSource, /this\\._applyGraphicsQuality\\(this\\.graphicsQuality \\|\\| 'performance', false\\)/);
+  assert.match(mainSource, /this\._applyGraphicsQuality\(this\.graphicsQuality \|\| 'performance', false\)/);
 });
 
 test('mobile scene keeps the full player but skips low-detail background rigs', () => {
