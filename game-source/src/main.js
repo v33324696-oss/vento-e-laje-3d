@@ -1484,7 +1484,7 @@ class Pipa3DGame {
     const rightKey = !!(this.keys['KeyD'] || this.keys['ArrowRight']);
 
     const pointerHeldPull =
-      this.pointer.down && performance.now() - this.pointer.downTime > 190;
+      this.pointer.down && performance.now() - this.pointer.downTime > 55;
 
     let steer = 0;
     if (leftKey) steer -= 1;
