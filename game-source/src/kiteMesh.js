@@ -1,7 +1,5 @@
 import * as THREE from 'three';
 import { getKitePatternTexture } from './textures.js';
-import { getKiteAeroProfile } from './kiteAerodynamics.js';
-import { getTailDynamics } from './kiteStructure.js';
 
 export const KITE_MODELS = {
   murcha: { id: 'murcha', name: 'Murcha Paulista', desc: 'Modelo clássico equilibrado, bom para vento médio e manobras.', scale: 1.0, speedMult: 1.0, turnMult: 1.0, spinRate: 2.6, powerMult: 1.05, tailSegments: 26, ribbonColor: 0x111827, accentRibbonColor: 0xf43f5e },
@@ -99,7 +97,6 @@ export class KiteVisual {
     this.scene.add(this.group);
 
     this.aeroFlex = 0.2;
-    this.structuralFlex = 0;
     this.flutterPhase = Math.random() * Math.PI * 2;
 
     this._buildKiteBody();
@@ -107,7 +104,6 @@ export class KiteVisual {
   }
 
   _buildKiteBody() {
-    this.flexibleSpars = [];
     // Clear previous children if rebuilding in Oficina
     while (this.kiteBody.children.length > 0) {
       const ch = this.kiteBody.children.pop();
@@ -144,7 +140,6 @@ export class KiteVisual {
     const spineMesh = new THREE.Mesh(spineGeo, bambooMat);
     spineMesh.position.set(0, 0, -0.012);
     this.kiteBody.add(spineMesh);
-    this._registerFlexibleSpar(spineMesh);
 
     // Fiberglass / Bamboo curved upper spar ("vareta de cima envergada")
     const fiberMat = new THREE.MeshStandardMaterial({
@@ -172,7 +167,6 @@ export class KiteVisual {
     const upperSparGeo = new THREE.TubeGeometry(upperCurve, 18, 0.011, 6, false);
     const upperSpar = new THREE.Mesh(upperSparGeo, fiberMat);
     this.kiteBody.add(upperSpar);
-    this._registerFlexibleSpar(upperSpar);
 
     // Lower spar ("vareta de baixo") for traditional kites
     if (!['raia', 'capucheta', 'delta', 'estrela', 'morcego'].includes(this.modelId)) {
@@ -183,7 +177,6 @@ export class KiteVisual {
       const lowSpar = new THREE.Mesh(lowGeo, fiberMat);
       lowSpar.position.set(0, lowY, -0.035);
       this.kiteBody.add(lowSpar);
-      this._registerFlexibleSpar(lowSpar);
     }
 
     // 3-point Bridle ("Cabresto de 3 pontas") on front (+Z) side
@@ -209,13 +202,6 @@ export class KiteVisual {
 
     // Apply model base scale
     this.kiteBody.scale.setScalar(spec.scale * 1.38);
-  }
-
-  _registerFlexibleSpar(mesh) {
-    const position = mesh.geometry?.attributes?.position;
-    if (!position) return;
-    mesh.geometry.userData.basePositions = new Float32Array(position.array);
-    this.flexibleSpars.push(mesh);
   }
 
   _initTail() {
@@ -333,9 +319,6 @@ export class KiteVisual {
     position,
     quaternion,
     aeroLoad = 0.35,
-    structuralLoad = 0,
-    angleOfAttack = 0.26,
-    stalled = false,
     windVec,
     sunDir,
     cameraPos,
@@ -349,20 +332,9 @@ export class KiteVisual {
     const perceptualScale = 1.0 + Math.min(0.65, Math.max(0, (distToCam - 38) * 0.0065));
     this.group.scale.setScalar(perceptualScale);
 
-    // Paper, bamboo and tail each respond to the model's own mass, stiffness
-    // and flexibility instead of sharing one generic bend animation.
-    const aeroProfile = getKiteAeroProfile(this.modelId);
-    const windSpeed = windVec ? windVec.length() : 0;
-    const targetStructuralFlex = THREE.MathUtils.clamp(structuralLoad, 0, 1.35);
-    this.structuralFlex += (targetStructuralFlex - this.structuralFlex) * Math.min(1, dt * 5.5);
-    this.flutterPhase += dt * (8 + windSpeed * 0.42) * aeroProfile.flutterRate;
+    // Dynamic wing flex & paper flutter
+    this.flutterPhase += dt * (14 + aeroLoad * 24);
     this.aeroFlex += (aeroLoad - this.aeroFlex) * Math.min(1, dt * 14);
-    const paperFlex = THREE.MathUtils.clamp(
-      this.structuralFlex * aeroProfile.flexibility + this.aeroFlex * 0.24
-        + Math.max(0, angleOfAttack - 0.3) * 0.16,
-      0,
-      1.35
-    );
 
     const posAttr = this.paperGeo.attributes.position;
     const base = this.paperGeo.userData.basePositions;
@@ -371,36 +343,11 @@ export class KiteVisual {
       const w = weights[i];
       if (w > 0.001) {
         const bx = base[i * 3];
-        const by = base[i * 3 + 1];
-        const flutter = Math.sin(this.flutterPhase + bx * 4.5 + by * 1.8)
-          * (0.004 + Math.min(0.014, windSpeed * 0.0008))
-          * w * aeroProfile.flutterRate * (stalled ? 1.45 : 1);
-        posAttr.array[i * 3 + 2] = base[i * 3 + 2] - w * paperFlex * 0.18 + flutter;
-        posAttr.array[i * 3 + 1] = by
-          + Math.sin(this.flutterPhase * 0.72 + bx * 3.2) * w * paperFlex * 0.009;
+        const flutter = Math.sin(this.flutterPhase + bx * 4.5) * 0.014 * w * (0.4 + this.aeroFlex);
+        posAttr.array[i * 3 + 2] = base[i * 3 + 2] - w * this.aeroFlex * 0.22 + flutter;
       }
     }
     posAttr.needsUpdate = true;
-
-    // The spars bend under pressure too. Their deflection is deliberately
-    // smaller than the paper's and is limited by each model's frame strength.
-    for (const spar of this.flexibleSpars) {
-      const geometry = spar.geometry;
-      const position = geometry.attributes.position;
-      const rest = geometry.userData.basePositions;
-      if (!rest) continue;
-      const frameBend = this.structuralFlex * aeroProfile.flexibility * 0.026;
-      for (let i = 0; i < position.count; i++) {
-        const x = rest[i * 3];
-        const y = rest[i * 3 + 1];
-        const edge = THREE.MathUtils.clamp(Math.abs(x) / 0.95, 0, 1);
-        position.array[i * 3] = x;
-        position.array[i * 3 + 1] = y + Math.sin(this.flutterPhase + x * 2.8) * frameBend * edge * 0.08;
-        position.array[i * 3 + 2] = rest[i * 3 + 2] - frameBend * edge * edge;
-      }
-      position.needsUpdate = true;
-      geometry.computeVertexNormals();
-    }
 
     // Backlit silk-paper translucency boost when looking toward sun
     if (sunDir && cameraPos) {
@@ -415,8 +362,7 @@ export class KiteVisual {
     this.tailPrev[0].copy(attach);
 
     const stepDt = Math.min(0.033, dt);
-    const tailDynamics = getTailDynamics(this.modelId, this.getTailRatio(), windSpeed);
-    const drag = tailDynamics.damping;
+    const drag = 0.945;
     const count = this.activeTailNodes;
 
     // Kite side vector for Karman vortex tail wave
@@ -432,11 +378,10 @@ export class KiteVisual {
 
       prev.copy(curr);
 
-      const wave = Math.sin(this.flutterPhase * 0.85 - i * 0.58)
-        * (tailDynamics.flutter + this.structuralFlex * 0.01);
-      curr.x += vx + windVec.x * tailDynamics.windCoupling * stepDt + _tmpSide.x * wave;
-      curr.y += vy + (-tailDynamics.gravity + windVec.y * 0.4) * stepDt + _tmpSide.y * wave;
-      curr.z += vz + windVec.z * tailDynamics.windCoupling * stepDt + _tmpSide.z * wave;
+      const wave = Math.sin(this.flutterPhase * 0.85 - i * 0.58) * (0.042 + this.aeroFlex * 0.055);
+      curr.x += vx + (windVec.x * 0.52) * stepDt + _tmpSide.x * wave;
+      curr.y += vy + (-5.6 + windVec.y * 0.4) * stepDt + _tmpSide.y * wave;
+      curr.z += vz + (windVec.z * 0.52) * stepDt + _tmpSide.z * wave;
     }
 
     const targetSegLen = this.segLength * perceptualScale;
