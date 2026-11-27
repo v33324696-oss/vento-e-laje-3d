@@ -43,6 +43,7 @@ const safeState = (state = {}) => {
     reelSpeed: Number.isFinite(Number(state.reelSpeed)) ? Math.max(-40, Math.min(40, Number(state.reelSpeed))) : 0,
     socada: Number.isFinite(Number(state.socada)) ? Math.max(0, Math.min(1.5, Number(state.socada))) : 0,
     disque: Number.isFinite(Number(state.disque)) ? Math.max(0, Math.min(1.2, Number(state.disque))) : 0,
+    disbicar: Number.isFinite(Number(state.disbicar)) ? Math.max(0, Math.min(1, Number(state.disbicar))) : 0,
     largadaActive: state.largadaActive === true,
     largadaTagActive: state.largadaTagActive === true,
     largadaQuality: Number.isFinite(Number(state.largadaQuality)) ? Math.max(0, Math.min(1, Number(state.largadaQuality))) : 0,
@@ -116,12 +117,30 @@ function closestPolylineContact(pointsA, pointsB) {
   return best;
 }
 function moveNameFor(player, ownU, targetU) {
+  if (player.state.disbicar > 0.22) return 'no disbicar';
   if (player.state.largadaTagActive && player.state.largadaQuality >= 0.68) return 'largada';
   if (player.state.socada > 0.28) return 'socada';
   if (player.state.reelSpeed < -11) return 'puxada';
   if (player.state.reelSpeed > 11) return 'descarrego';
   if (targetU > 0.82 && ownU < 0.78) return 'no cabresto';
   return 'no cruzamento';
+}
+
+function rearAdvantage(attacker, defender) {
+  const v = defender.state.kiteVelocity;
+  let fx = v[0], fy = v[1], fz = v[2];
+  let fl = Math.hypot(fx, fy, fz);
+  if (fl < 0.8) {
+    fx = defender.state.kitePosition[0] - defender.state.position[0];
+    fy = defender.state.kitePosition[1] - defender.state.position[1];
+    fz = defender.state.kitePosition[2] - defender.state.position[2];
+    fl = Math.hypot(fx, fy, fz) || 1;
+  }
+  const rx = attacker.state.kitePosition[0] - defender.state.kitePosition[0];
+  const ry = attacker.state.kitePosition[1] - defender.state.kitePosition[1];
+  const rz = attacker.state.kitePosition[2] - defender.state.kitePosition[2];
+  const rl = Math.hypot(rx, ry, rz) || 1;
+  return (rx * fx + ry * fy + rz * fz) / (rl * fl) < -0.25 ? 1 : 0;
 }
 
 function updateRoomRelo(room, dt, now) {
@@ -140,7 +159,7 @@ function updateRoomRelo(room, dt, now) {
         a.state.kiteVelocity[1] - b.state.kiteVelocity[1],
         a.state.kiteVelocity[2] - b.state.kiteVelocity[2]
       );
-      const activeMotion = Math.max(relativeSpeed, Math.abs(a.state.reelSpeed), Math.abs(b.state.reelSpeed), a.state.socada * 8, b.state.socada * 8, a.state.disque * 8, b.state.disque * 8);
+      const activeMotion = Math.max(relativeSpeed, Math.abs(a.state.reelSpeed), Math.abs(b.state.reelSpeed), a.state.socada * 8, b.state.socada * 8, a.state.disque * 8, b.state.disque * 8, a.state.disbicar * 8, b.state.disbicar * 8);
 
       if (contact.distance > 1.08 || crossingQuality < 0.19 || activeMotion < 1.25) {
         const existing = room.fights.get(key);
@@ -160,21 +179,25 @@ function updateRoomRelo(room, dt, now) {
       const scoreA = evaluateReloScore({
         crossingQuality, tension: a.state.tension, reelSpeed: a.state.reelSpeed,
         kiteSpeed: Math.hypot(...a.state.kiteVelocity), relativeSpeed,
-        socada: a.state.socada, disque: a.state.disque,
+        socada: a.state.socada, disque: a.state.disque, disbicar: a.state.disbicar,
         largadaActive: a.state.largadaActive, largadaQuality: a.state.largadaQuality,
-        linePower: a.state.linePower, ownU: contact.s, targetU: contact.t, wrapQuality
+        linePower: a.state.linePower, ownU: contact.s, targetU: contact.t, wrapQuality,
+        rearAdvantage: rearAdvantage(a, b),
+        defenderExposure: b.state.reelSpeed > 5 ? Math.max(0, Math.min(1, (b.state.reelSpeed - 5) / 22)) : 0
       });
       const scoreB = evaluateReloScore({
         crossingQuality, tension: b.state.tension, reelSpeed: b.state.reelSpeed,
         kiteSpeed: Math.hypot(...b.state.kiteVelocity), relativeSpeed,
-        socada: b.state.socada, disque: b.state.disque,
+        socada: b.state.socada, disque: b.state.disque, disbicar: b.state.disbicar,
         largadaActive: b.state.largadaActive, largadaQuality: b.state.largadaQuality,
-        linePower: b.state.linePower, ownU: contact.t, targetU: contact.s, wrapQuality
+        linePower: b.state.linePower, ownU: contact.t, targetU: contact.s, wrapQuality,
+        rearAdvantage: rearAdvantage(b, a),
+        defenderExposure: a.state.reelSpeed > 5 ? Math.max(0, Math.min(1, (a.state.reelSpeed - 5) / 22)) : 0
       });
 
       const frictionFactor = 0.38 + crossingQuality * 0.18;
-      fight.integrityB -= scoreA * dt * frictionFactor;
-      fight.integrityA -= scoreB * dt * frictionFactor;
+      fight.integrityB -= scoreA * dt * frictionFactor / Math.max(0.55, b.state.lineDurability);
+      fight.integrityA -= scoreB * dt * frictionFactor / Math.max(0.55, a.state.lineDurability);
 
       if (fight.integrityA <= 0 || fight.integrityB <= 0) {
         const aWins = fight.integrityB <= 0 && (fight.integrityA > 0 || scoreA >= scoreB);
