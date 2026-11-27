@@ -104,7 +104,7 @@
       <div class="relaunch-title">✂️ SUA PIPA FOI CORTADA!</div>
       <p class="relaunch-sub" id="relaunch-reason">Sua pipa foi embora boiando no vento...</p>
       <button id="btn-relaunch" class="primary-cta">
-        🪁 EMPINAR NOVA PIPA DA LAJE <span class="key-pill">ESPAÇO</span>
+        🪁 PEGAR UMA NOVA PIPA E EMPINAR
       </button>
     </div>
   </div>
@@ -123,9 +123,10 @@
     <div class="guide-row"><kbd>A</kbd> <kbd>D</kbd> / <kbd>Setas</kbd> <span>Guiar o bico</span></div>
     <div class="guide-row"><kbd>Q</kbd> / <kbd>E</kbd> <span>Disque lateral</span></div>
     <div class="guide-row"><kbd>C</kbd> <span>Alternar Câmera 3D</span></div>
-    <div class="guide-row"><kbd>V</kbd> <span>Entrar / sair do modo personagem</span></div>
-    <div class="guide-row"><kbd>W A S D</kbd> <span>Andar pelo mapa no modo personagem</span></div>
-    <div class="guide-row"><kbd>E</kbd> <span>Escolher este local para empinar</span></div>
+    <div class="guide-row"><kbd>V</kbd> <span>Voltar a segurar a pipa e escolher outro ponto</span></div>
+    <div class="guide-row"><kbd>W A S D</kbd> <span>Andar pela laje com a pipa na mão</span></div>
+    <div class="guide-row"><kbd>SHIFT</kbd> <span>Correr antes de lançar para ganhar impulso</span></div>
+    <div class="guide-row"><kbd>E</kbd> <span>Soltar a pipa manualmente</span></div>
   </aside>
 
   <!-- Touch controller used while exploring the map on phones/tablets -->
@@ -138,7 +139,7 @@
     </div>
     <div class="touch-char-actions">
       <button type="button" id="touch-sprint" class="touch-action-btn">CORRER</button>
-      <button type="button" id="touch-launch" class="touch-action-btn touch-launch-btn">🪁 EMPINAR AQUI</button>
+      <button type="button" id="touch-launch" class="touch-action-btn touch-launch-btn">🪁 SOLTAR PIPA</button>
     </div>
   </section>
 
@@ -272,6 +273,19 @@
         </select>
       </section>
 
+      <section class="difficulty-panel">
+        <div>
+          <span class="section-eyebrow">NÍVEL DOS ADVERSÁRIOS</span>
+          <strong>Dificuldade da partida</strong>
+          <small>Escolha como os pipeiros rivais vão se comportar.</small>
+        </div>
+        <select id="match-difficulty" aria-label="Dificuldade da partida">
+          <option value="easy">Fácil — para aprender</option>
+          <option value="normal" selected>Normal — equilibrado</option>
+          <option value="hard">Difícil — rivais agressivos</option>
+        </select>
+      </section>
+
       <div class="mode-cards">
         <button class="mode-card selected" data-mode="festival">
           <div class="mc-icon">🪁</div>
@@ -375,27 +389,68 @@
     <div class="online-card glass-card">
       <div class="oficina-header">
         <div>
-          <h2>🌐 SALAS ONLINE</h2>
-          <p>Crie uma sala privada ou entre usando o código de um amigo</p>
+          <h2>🌐 CENTRAL ONLINE</h2>
+          <p>Crie sua própria sala ou entre na sala de outro pipeiro</p>
         </div>
         <button id="btn-close-online" class="close-btn">✕</button>
       </div>
       <div class="online-form">
         <label class="sec-label" for="online-name">SEU APELIDO</label>
         <input id="online-name" maxlength="18" value="Pipeiro" placeholder="Digite seu apelido" />
-        <label class="sec-label" for="online-room">CÓDIGO DA SALA (PARA ENTRAR)</label>
-        <input id="online-room" maxlength="8" placeholder="Ex.: PIPA42" autocomplete="off" />
-        <label class="sec-label" for="online-server">SERVIDOR (AVANÇADO)</label>
-        <input id="online-server" placeholder="Automático: mesmo endereço do jogo" />
-        <div class="online-actions">
-          <button id="btn-create-room" class="primary-cta">CRIAR SALA</button>
-          <button id="btn-join-room" class="secondary-cta">ENTRAR NA SALA</button>
+
+        <div id="online-home" class="online-choice-grid">
+          <button id="btn-menu-create-room" type="button" class="online-choice-card">
+            <span>🏠</span><strong>CRIAR MINHA SALA</strong><small>Escolha o mapa e a dificuldade e convide seus amigos</small>
+          </button>
+          <button id="btn-menu-join-room" type="button" class="online-choice-card">
+            <span>🔑</span><strong>ENTRAR EM UMA SALA</strong><small>Digite o código de seis letras do seu amigo</small>
+          </button>
         </div>
-        <div id="online-status" class="online-status">Desconectado. Escolha criar uma sala ou entrar com um código.</div>
-        <div id="online-room-created" class="room-created hidden">
-          <span>SUA SALA</span>
-          <strong id="online-room-code">------</strong>
-          <button id="btn-copy-room" class="secondary-cta">COPIAR CÓDIGO</button>
+
+        <div id="online-create-panel" class="online-subpanel hidden">
+          <div class="online-panel-title">CONFIGURAR NOVA SALA</div>
+          <label class="sec-label" for="online-room-map">CENÁRIO DA PARTIDA</label>
+          <select id="online-room-map">
+            <option value="laje">🏘️ Laje do Bairro</option>
+            <option value="praia">🏖️ Praia</option>
+            <option value="parque">🌳 Parque</option>
+            <option value="campinho">⚽ Campinho</option>
+            <option value="morro">🌄 Mirante do Morro</option>
+          </select>
+          <label class="sec-label" for="online-room-difficulty">DIFICULDADE DOS ADVERSÁRIOS</label>
+          <select id="online-room-difficulty">
+            <option value="easy">Fácil</option>
+            <option value="normal" selected>Normal</option>
+            <option value="hard">Difícil</option>
+          </select>
+          <p class="online-panel-hint">A sala será privada. Compartilhe o código gerado para seus amigos entrarem. Limite de 12 pipeiros.</p>
+          <button id="btn-create-room" type="button" class="primary-cta">CRIAR SALA AGORA</button>
+          <button id="btn-online-back-create" type="button" class="secondary-cta">VOLTAR</button>
+        </div>
+
+        <div id="online-join-panel" class="online-subpanel hidden">
+          <div class="online-panel-title">ENTRAR COM CÓDIGO</div>
+          <label class="sec-label" for="online-room">CÓDIGO DA SALA</label>
+          <input id="online-room" maxlength="8" placeholder="Ex.: PIPA42" autocomplete="off" />
+          <button id="btn-join-room" type="button" class="primary-cta">ENTRAR NA SALA</button>
+          <button id="btn-online-back-join" type="button" class="secondary-cta">VOLTAR</button>
+        </div>
+
+        <details class="online-advanced">
+          <summary>Servidor avançado</summary>
+          <input id="online-server" placeholder="Automático: mesmo endereço do jogo" />
+        </details>
+
+        <div id="online-status" class="online-status">Escolha criar uma sala ou entrar com um código.</div>
+        <div id="online-room-created" class="online-lobby hidden">
+          <div class="room-created">
+            <span>SUA SALA</span>
+            <strong id="online-room-code">------</strong>
+            <button id="btn-copy-room" type="button" class="secondary-cta">COPIAR CÓDIGO</button>
+          </div>
+          <p id="online-room-meta" class="online-panel-hint">Laje do Bairro • Normal • até 12 jogadores</p>
+          <div id="online-player-list" class="online-player-list">1/12 jogadores na sala</div>
+          <p class="online-panel-hint">Envie o código para seus amigos. Feche este menu para voltar à partida.</p>
         </div>
       </div>
     </div>
