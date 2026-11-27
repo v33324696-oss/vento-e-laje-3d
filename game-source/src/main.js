@@ -1993,6 +1993,10 @@ class Pipa3DGame {
   }
 
   _executeLineCut(winner, loser, cutPoint, loserU) {
+    if (this.replayBuffer.length >= 2) {
+      this.lastReplayFrames = this.replayBuffer.slice();
+      document.getElementById('btn-replay')?.classList.remove('hidden');
+    }
     this.effects.emitSparks(cutPoint, 26, true);
     winner.lineIntegrity = 1.0;
 
@@ -2252,6 +2256,155 @@ class Pipa3DGame {
     }
   }
 
+  _captureReplayKite(kite) {
+    return {
+      active: kite.active,
+      visible: kite.visual.group.visible,
+      lineVisible: kite.lineMesh.visible,
+      position: kite.position.toArray(),
+      quaternion: kite.quaternion.toArray(),
+      linePoints: Float32Array.from(kite.stringNodes.flatMap((node) => node.toArray()))
+    };
+  }
+
+  _captureReplayFrame() {
+    return {
+      time: this.elapsedTime,
+      player: this._captureReplayKite(this.playerKite),
+      rivals: this.rivals.map((entry) => this._captureReplayKite(entry.kite))
+    };
+  }
+
+  _recordReplayFrame(dt) {
+    if (!this.started || this.replayPlayback) return;
+    this.replayCaptureAccumulator += dt;
+    if (this.replayCaptureAccumulator < 0.09) return;
+    this.replayCaptureAccumulator = 0;
+    this.replayBuffer.push(this._captureReplayFrame());
+    if (this.replayBuffer.length > 72) this.replayBuffer.shift();
+  }
+
+  _applyReplayKite(kite, first, second = null, alpha = 0) {
+    if (!first) return;
+    _replayPosition.fromArray(first.position);
+    if (second) _replayPosition.lerp(_replayNextPosition.fromArray(second.position), alpha);
+    _replayQuaternion.fromArray(first.quaternion);
+    if (second) _replayQuaternion.slerp(_replayNextQuaternion.fromArray(second.quaternion), alpha);
+    kite.active = first.active;
+    kite.position.copy(_replayPosition);
+    kite.quaternion.copy(_replayQuaternion);
+    kite.visual.group.position.copy(_replayPosition);
+    kite.visual.group.quaternion.copy(_replayQuaternion);
+    kite.visual.setVisible(first.visible);
+    kite.lineMesh.visible = first.lineVisible;
+    if (first.linePoints?.length === (STRING_SEGMENTS + 1) * 3) {
+      for (let i = 0; i <= STRING_SEGMENTS; i++) {
+        const offset = i * 3;
+        const x = first.linePoints[offset];
+        const y = first.linePoints[offset + 1];
+        const z = first.linePoints[offset + 2];
+        if (second?.linePoints?.length === first.linePoints.length) {
+          kite.stringNodes[i].set(
+            x + (second.linePoints[offset] - x) * alpha,
+            y + (second.linePoints[offset + 1] - y) * alpha,
+            z + (second.linePoints[offset + 2] - z) * alpha
+          );
+        } else {
+          kite.stringNodes[i].set(x, y, z);
+        }
+      }
+      kite.lineGeo.setPositions(kite.stringNodes.flatMap((node) => node.toArray()));
+    }
+  }
+
+  _toggleReplay() {
+    if (this.replayPlayback) {
+      this._finishReplay();
+      return;
+    }
+    if (!this.lastReplayFrames || this.lastReplayFrames.length < 2) return;
+    this._startReplay();
+  }
+
+  _startReplay() {
+    const button = document.getElementById('btn-replay');
+    if (!this.lastReplayFrames || this.lastReplayFrames.length < 2) return;
+    this.replaySavedState = {
+      player: this._captureReplayKite(this.playerKite),
+      rivals: this.rivals.map((entry) => this._captureReplayKite(entry.kite)),
+      cameraPosition: this.camera.position.clone(),
+      cameraQuaternion: this.camera.quaternion.clone(),
+      cameraFov: this.camera.fov,
+      camModeIdx: this.camModeIdx
+    };
+    this.replayPlayback = { frames: this.lastReplayFrames, elapsed: 0 };
+    if (button) {
+      button.dataset.replaying = 'true';
+      button.querySelector('span:last-child').textContent = 'Sair replay';
+    }
+    this.showBanner('REPLAY CINEMATOGRÁFICO', 'Revendo os últimos instantes do confronto.', 'catch');
+  }
+
+  _updateReplayPlayback(dt) {
+    const playback = this.replayPlayback;
+    if (!playback) return;
+    const frames = playback.frames;
+    playback.elapsed += dt * 0.72;
+    const framePosition = playback.elapsed / 0.09;
+    const index = Math.min(frames.length - 1, Math.floor(framePosition));
+    const alpha = Math.min(1, framePosition - index);
+    const first = frames[index];
+    const second = frames[Math.min(frames.length - 1, index + 1)];
+    this._applyReplayKite(this.playerKite, first.player, second.player, alpha);
+
+    let midpoint = _replayPosition.copy(this.playerKite.position);
+    let rivalCount = 0;
+    for (let i = 0; i < this.rivals.length; i++) {
+      const a = first.rivals[i];
+      const b = second.rivals[i];
+      if (!a) continue;
+      const kite = this.rivals[i].kite;
+      this._applyReplayKite(kite, a, b, alpha);
+      if (a.active) {
+        midpoint.add(kite.position);
+        rivalCount++;
+      }
+    }
+    midpoint.divideScalar(rivalCount + 1);
+
+    const orbit = playback.elapsed * 0.72;
+    this.camera.position.set(
+      midpoint.x + Math.sin(orbit) * 19,
+      midpoint.y + 8 + Math.sin(orbit * 0.6) * 2.5,
+      midpoint.z + 24 + Math.cos(orbit) * 7
+    );
+    this.camera.lookAt(midpoint);
+    this.renderer.render(this.scene, this.camera);
+    if (index >= frames.length - 1) this._finishReplay();
+  }
+
+  _finishReplay() {
+    if (!this.replayPlayback || !this.replaySavedState) return;
+    const saved = this.replaySavedState;
+    this._applyReplayKite(this.playerKite, saved.player);
+    for (let i = 0; i < this.rivals.length; i++) {
+      if (saved.rivals[i]) this._applyReplayKite(this.rivals[i].kite, saved.rivals[i]);
+    }
+    this.camera.position.copy(saved.cameraPosition);
+    this.camera.quaternion.copy(saved.cameraQuaternion);
+    this.camera.fov = saved.cameraFov;
+    this.camera.updateProjectionMatrix();
+    this.camModeIdx = saved.camModeIdx;
+    document.getElementById('label-camera').textContent = this.cameraModes[this.camModeIdx].label;
+    const button = document.getElementById('btn-replay');
+    if (button) {
+      delete button.dataset.replaying;
+      button.querySelector('span:last-child').textContent = 'Replay';
+    }
+    this.replayPlayback = null;
+    this.replaySavedState = null;
+  }
+
   _animate() {
     requestAnimationFrame(this._animate);
     if (this.paused) {
@@ -2263,6 +2416,10 @@ class Pipa3DGame {
     const rawDt = (nowMs - this.lastFrameMs) * 0.001;
     this.lastFrameMs = nowMs;
     const dt = Math.min(0.04, Math.max(0.001, rawDt));
+    if (this.replayPlayback) {
+      this._updateReplayPlayback(dt);
+      return;
+    }
     this.elapsedTime += dt;
     const elapsed = this.elapsedTime;
 
@@ -2444,3 +2601,8 @@ const _heldKiteLocal = new THREE.Vector3(0.48, 1.54, -0.62);
 const _heldKiteEuler = new THREE.Euler();
 const _launchForward = new THREE.Vector3();
 const _recoveryTarget = new THREE.Vector3();
+
+const _replayPosition = new THREE.Vector3();
+const _replayNextPosition = new THREE.Vector3();
+const _replayQuaternion = new THREE.Quaternion();
+const _replayNextQuaternion = new THREE.Quaternion();
