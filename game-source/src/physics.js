@@ -413,11 +413,14 @@ export class KiteEntity {
     _airRelative.subVectors(this.localWind, this.velocity);
     const apparentSpeed = Math.max(0.001, _airRelative.length());
     const sideSlip = Math.abs(_airRelative.dot(_tRight)) / apparentSpeed;
-    const maneuverLoad = Math.abs(steer) * 0.12 + Math.abs(this.angularVel) * 0.018;
+    // Keep normal steering in the attached-flow range. Hard turns and
+    // strong sideways airflow can still stall the kite, but ordinary pursuit
+    // should not lose all lift just because the pilot is trying to climb.
+    const maneuverLoad = Math.abs(steer) * 0.065 + Math.abs(this.angularVel) * 0.009;
     const targetAoA = THREE.MathUtils.clamp(
-      0.24 + sideSlip * 0.38 + maneuverLoad + (1 - this.tension) * 0.035,
-      0.07,
-      0.82
+      0.22 + sideSlip * 0.25 + maneuverLoad + (1 - this.tension) * 0.025,
+      0.09,
+      0.60
     );
     this.angleOfAttack += (targetAoA - this.angleOfAttack) * Math.min(1, stepDt * 11.5);
     const bankLimit = tailRatio < 0.45 ? 0.48 : 0.72;
@@ -441,14 +444,13 @@ export class KiteEntity {
     this.aeroDynamicPressure = aero.dynamicPressure;
     this.stalled = aero.stalled;
 
-    // Gravity is in game-scale units. In this simulation the lift vector can
-    // otherwise exceed gravity continuously at normal wind speeds, creating a
-    // runaway climb even with no pilot input. Let the wind support the kite,
-    // but reserve any positive climb for the player's actual steering/line
-    // commands below.
+    // Gravity is in game-scale units. Allow real aerodynamic lift to raise
+    // the kite, but cap the net upward acceleration and damp existing climb
+    // speed so steady wind cannot send it endlessly toward the sky.
     const gravity = 2.45;
-    const supportedVerticalAero = Math.min(aero.fy, gravity);
-    const upwardMotionDamping = Math.max(0, this.velocity.y) * 0.42;
+    const maxVerticalLift = gravity + 1.0;
+    const supportedVerticalAero = Math.min(aero.fy, maxVerticalLift);
+    const upwardMotionDamping = Math.max(0, this.velocity.y) * 0.48;
     _DesiredVel.set(
       aero.fx,
       supportedVerticalAero - gravity - upwardMotionDamping,
