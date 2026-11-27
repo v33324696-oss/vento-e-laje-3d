@@ -57,8 +57,8 @@ function normalizeProfile(value) {
 }
 
 export class ProgressionStore {
-  constructor(storage = globalThis.localStorage) {
-    this.storage = storage;
+  constructor(storage = null) {
+    try { this.storage = storage || globalThis.localStorage; } catch { this.storage = null; }
     this.profile = createDefaultProfile();
     try {
       const raw = this.storage?.getItem(STORAGE_KEY);
