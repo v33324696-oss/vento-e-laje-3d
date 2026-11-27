@@ -118,7 +118,7 @@ export class GameWorld {
     this.araNpcSerial = 0;
     this.araCharacterQueue = [];
     this.araCharacterLoads = 0;
-    this.araCharacterConcurrency = 2;
+    this.araCharacterConcurrency = 1;
     this.playerMoveSpeed = 0;
     this.cloudMaterial = null;
     this.rainPoints = null;
@@ -521,7 +521,7 @@ export class GameWorld {
     this.playerAvatar.position.set(0, 9.74, 13.9);
     this.scene.add(this.playerAvatar);
     this._queueAraCharacter(this.playerAvatar, PLAYER_ARA_CHARACTER, {
-      detail: 'high',
+      detail: 'low',
       targetHeight: 1.78,
       player: true
     });
@@ -567,7 +567,7 @@ export class GameWorld {
     const { createCharacter } = await import('ara3d');
     const character = await createCharacter(profile, {
       detail: options.detail || 'low',
-      animations: ['idle', 'walk', 'run'],
+      animations: ['idle', 'walk'],
       rootMotion: false
     });
     const human = character.scene;

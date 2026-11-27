@@ -8,8 +8,12 @@ const worldSource = readFileSync(new URL('../src/world.js', import.meta.url), 'u
 test('mobile devices get a separate performance-first graphics preference', () => {
   assert.match(mainSource, /this\.isMobileLayout \? 'vento-laje-graphics-mobile' : 'vento-laje-graphics'/);
   assert.match(mainSource, /let savedQuality = this\.isMobileLayout \? 'performance' : 'balanced'/);
-  assert.match(mainSource, /mobileRatio: 0\.78/);
+  assert.match(mainSource, /mobileRatio: 0\.68/);
   assert.match(mainSource, /this\.isMobileLayout \? false : preset\.shadows/);
+  assert.match(mainSource, /antialias: false/);
+  assert.match(mainSource, /let savedQuality = 'performance'/);
+  assert.match(worldSource, /detail: 'low'/);
+  assert.match(worldSource, /this\.araCharacterConcurrency = 1/);
 });
 
 test('resizing preserves the selected graphics profile', () => {

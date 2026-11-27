@@ -138,15 +138,15 @@ class Pipa3DGame {
 
     this.isMobileLayout = window.matchMedia('(max-width: 820px), (pointer: coarse)').matches;
     this.renderer = new THREE.WebGLRenderer({
-      antialias: !this.isMobileLayout,
+      antialias: false,
       powerPreference: 'high-performance'
     });
     this.renderer.setSize(w, h);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.isMobileLayout ? 0.85 : 1.8));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.isMobileLayout ? 0.68 : 1.15));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.96;
-    this.renderer.shadowMap.enabled = !this.isMobileLayout;
+    this.renderer.shadowMap.enabled = false;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
     this.container.appendChild(this.renderer.domElement);
@@ -525,10 +525,10 @@ class Pipa3DGame {
     // Graphics profile adapts render scale and shadows to the device.
     const qualitySelect = document.getElementById('graphics-quality');
     const graphicsStorageKey = this.isMobileLayout ? 'vento-laje-graphics-mobile' : 'vento-laje-graphics';
-    let savedQuality = this.isMobileLayout ? 'performance' : 'balanced';
+    let savedQuality = 'performance';
     try { savedQuality = localStorage.getItem(graphicsStorageKey) || savedQuality; } catch {}
     if (!['performance', 'balanced', 'high'].includes(savedQuality)) {
-      savedQuality = this.isMobileLayout ? 'performance' : 'balanced';
+      savedQuality = 'performance';
     }
     qualitySelect.value = savedQuality;
     this._applyGraphicsQuality(savedQuality, false);
@@ -1033,9 +1033,9 @@ class Pipa3DGame {
 
   _applyGraphicsQuality(level = 'balanced', persist = true) {
     const presets = {
-      performance: { desktopRatio: 1.05, mobileRatio: 0.78, shadows: false },
-      balanced: { desktopRatio: 1.55, mobileRatio: 0.96, shadows: true },
-      high: { desktopRatio: 2.0, mobileRatio: 1.15, shadows: true }
+      performance: { desktopRatio: 1.15, mobileRatio: 0.68, shadows: false },
+      balanced: { desktopRatio: 1.35, mobileRatio: 0.82, shadows: false },
+      high: { desktopRatio: 1.7, mobileRatio: 0.95, shadows: true }
     };
     const preset = presets[level] || presets.balanced;
     const maxRatio = this.isMobileLayout ? preset.mobileRatio : preset.desktopRatio;
