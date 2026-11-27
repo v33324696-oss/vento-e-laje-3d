@@ -8,7 +8,6 @@ import { evaluateReloScore } from './relo.js';
 
 export const STRING_SEGMENTS = 28;
 
-// Normal kites fly forward at a moderate line angle, not straight overhead.
 // Computes closest points between 3D line segments P1-Q1 and P2-Q2
 export function closestPointsBetweenSegments(p1, q1, p2, q2, out1, out2) {
   _d1.subVectors(q1, p1);
@@ -164,16 +163,10 @@ export class KiteEntity {
     this.disqueBoost = 0;
     this.disbicarBoost = 0;
     this.disbicarCooldown = 0;
-    this.turnCooldown = 0;
-    this.directionTarget = 0;
-    this.retaoBoost = 0;
-    this.retaoCooldown = 0;
     this.reloContactTime = 0;
     this.noseAngle = (Math.random() - 0.5) * 0.35;
     this.angularVel = 0;
     this.tension = 0.5;
-    this.angleOfAttack = 0.26;
-    this.bankAngle = 0;
     this.stalled = false;
     this.stringRopeReady = false;
     this.velocity.set(0, 0, 0);
