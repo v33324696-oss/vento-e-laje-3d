@@ -1013,6 +1013,7 @@ const _kiteX = new THREE.Vector3();
 const _kiteY = new THREE.Vector3();
 const _kiteZ = new THREE.Vector3();
 const _rotMat = new THREE.Matrix4();
+const _bankQuat = new THREE.Quaternion();
 const _bridleWorld = new THREE.Vector3();
 const _windNorm = new THREE.Vector3();
 const _baseCol = new THREE.Color();
