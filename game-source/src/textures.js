@@ -42,7 +42,7 @@ export const KITE_PATTERNS = [
   { id: 'prata_fogo', name: 'Prata e Fogo', colors: ['#cbd5e1', '#475569', '#f97316', '#fef3c7'] },
   { id: 'oceano', name: 'Oceano', colors: ['#0e7490', '#06b6d4', '#cffafe', '#1e3a8a'] },
   { id: 'arco_iris', name: 'Arco-íris', colors: ['#ef4444', '#facc15', '#22c55e', '#3b82f6'] },
-  { id: 'hello_kitty', name: 'Hello Kitty 🎀', colors: ['#ffd6e7', '#fffafd', '#ed4a91', '#392735'] }
+  { id: 'hello_kitty', name: 'Pipa da Hello Kitty 🎀', colors: ['#d58aa8', '#fffafd', '#ed4a91', '#392735'] }
 ];
 
 const textureCache = new Map();
@@ -68,6 +68,258 @@ function addSilkPaperGrain(ctx, size) {
   grad.addColorStop(1, 'rgba(0,0,0,0.12)');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, size, size);
+  ctx.restore();
+}
+
+
+function drawHelloKittyArtwork(ctx, size) {
+  const cx = size / 2;
+  const cy = size / 2;
+  const ink = '#251824';
+
+  const drawBow = (x, y, scale, alpha = 1) => {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+    ctx.fillStyle = '#df3c83';
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(-9, 0);
+    ctx.bezierCurveTo(-55, -58, -94, -26, -70, 15);
+    ctx.bezierCurveTo(-55, 39, -27, 22, -9, 7);
+    ctx.bezierCurveTo(-24, 44, -17, 73, 12, 69);
+    ctx.bezierCurveTo(40, 66, 43, 37, 14, 4);
+    ctx.bezierCurveTo(64, -50, 103, -22, 82, 18);
+    ctx.bezierCurveTo(67, 44, 34, 23, 9, 7);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#f58ab7';
+    ctx.beginPath();
+    ctx.ellipse(0, 7, 17, 20, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  const drawWallpaperHead = (x, y, scale, rotation, alpha) => {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rotation);
+    ctx.scale(scale, scale);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#cd829e';
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(-72, -25);
+    ctx.lineTo(-91, -112);
+    ctx.quadraticCurveTo(-94, -128, -77, -119);
+    ctx.lineTo(-32, -79);
+    ctx.quadraticCurveTo(0, -89, 32, -79);
+    ctx.lineTo(77, -119);
+    ctx.quadraticCurveTo(94, -128, 91, -112);
+    ctx.lineTo(72, -25);
+    ctx.bezierCurveTo(113, 16, 92, 105, 0, 111);
+    ctx.bezierCurveTo(-92, 105, -113, 16, -72, -25);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    drawBow(65, -75, 0.54, 0.95);
+    ctx.fillStyle = ink;
+    ctx.beginPath();
+    ctx.ellipse(-39, 25, 6, 10, 0, 0, Math.PI * 2);
+    ctx.ellipse(39, 25, 6, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#edc75c';
+    ctx.beginPath();
+    ctx.ellipse(0, 41, 7, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    for (const side of [-1, 1]) {
+      for (const offset of [-17, 0, 17]) {
+        ctx.beginPath();
+        ctx.moveTo(side * 65, 35 + offset);
+        ctx.lineTo(side * 103, 25 + offset * 1.35);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  };
+
+  const background = ctx.createLinearGradient(0, 0, size, size);
+  background.addColorStop(0, '#9c7188');
+  background.addColorStop(0.48, '#d5a2b8');
+  background.addColorStop(1, '#8f647f');
+  ctx.fillStyle = background;
+  ctx.fillRect(0, 0, size, size);
+
+  const glow = ctx.createRadialGradient(cx, cy, 18, cx, cy, size * 0.72);
+  glow.addColorStop(0, 'rgba(255,225,239,0.46)');
+  glow.addColorStop(1, 'rgba(49,23,44,0.20)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, size, size);
+
+  drawWallpaperHead(-16, 86, 0.9, -0.16, 0.72);
+  drawWallpaperHead(414, 56, 0.78, 0.19, 0.72);
+  drawWallpaperHead(65, 442, 0.74, 0.22, 0.62);
+  drawWallpaperHead(485, 414, 0.8, -0.2, 0.65);
+  drawBow(102, 18, 0.5, 0.95);
+  drawBow(410, 300, 0.55, 0.96);
+
+  for (let i = 0; i < 44; i++) {
+    const x = (i * 137 + 31) % size;
+    const y = (i * 83 + 47) % size;
+    ctx.fillStyle = i % 3 === 0 ? '#f2d18a' : i % 3 === 1 ? '#3a2635' : '#9e5879';
+    ctx.beginPath();
+    ctx.arc(x, y, i % 4 === 0 ? 5 : 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const star = (x, y, radius) => {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.shadowColor = '#fff4fa';
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.moveTo(0, -radius);
+    ctx.lineTo(radius * 0.22, -radius * 0.22);
+    ctx.lineTo(radius, 0);
+    ctx.lineTo(radius * 0.22, radius * 0.22);
+    ctx.lineTo(0, radius);
+    ctx.lineTo(-radius * 0.22, radius * 0.22);
+    ctx.lineTo(-radius, 0);
+    ctx.lineTo(-radius * 0.22, -radius * 0.22);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  };
+  star(46, 190, 9);
+  star(454, 190, 8);
+  star(396, 470, 9);
+  star(114, 360, 6);
+
+  // Main seated character.
+  ctx.save();
+  ctx.translate(cx, cy + 5);
+  ctx.fillStyle = '#fffaff';
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.ellipse(-8, 145, 75, 65, -0.12, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#f04f96';
+  ctx.beginPath();
+  ctx.moveTo(-58, 106);
+  ctx.quadraticCurveTo(-94, 124, -84, 193);
+  ctx.quadraticCurveTo(-51, 217, 20, 208);
+  ctx.quadraticCurveTo(72, 196, 60, 138);
+  ctx.quadraticCurveTo(25, 112, -58, 106);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#fffaff';
+  ctx.beginPath();
+  ctx.ellipse(0, 186, 28, 26, 0, 0, Math.PI * 2);
+  ctx.ellipse(-41, 211, 26, 17, -0.12, 0, Math.PI * 2);
+  ctx.ellipse(35, 211, 25, 17, 0.14, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.ellipse(-72, 120, 28, 19, -0.56, 0, Math.PI * 2);
+  ctx.ellipse(55, 115, 26, 18, 0.56, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#fffaff';
+  ctx.beginPath();
+  ctx.moveTo(-73, -27);
+  ctx.lineTo(-92, -117);
+  ctx.quadraticCurveTo(-96, -137, -76, -126);
+  ctx.lineTo(-30, -86);
+  ctx.quadraticCurveTo(0, -97, 30, -86);
+  ctx.lineTo(76, -126);
+  ctx.quadraticCurveTo(96, -137, 92, -117);
+  ctx.lineTo(73, -27);
+  ctx.bezierCurveTo(118, 13, 95, 94, 0, 101);
+  ctx.bezierCurveTo(-95, 94, -118, 13, -73, -27);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#f4a5c6';
+  ctx.beginPath();
+  ctx.moveTo(-81, -112);
+  ctx.lineTo(-49, -89);
+  ctx.lineTo(-73, -60);
+  ctx.closePath();
+  ctx.moveTo(81, -112);
+  ctx.lineTo(49, -89);
+  ctx.lineTo(73, -60);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = ink;
+  ctx.beginPath();
+  ctx.ellipse(-40, 24, 7.5, 13, 0, 0, Math.PI * 2);
+  ctx.ellipse(40, 24, 7.5, 13, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#edc34c';
+  ctx.beginPath();
+  ctx.ellipse(0, 49, 10, 7, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#9b742f';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(244,127,171,0.56)';
+  ctx.beginPath();
+  ctx.ellipse(-73, 51, 16, 9, 0, 0, Math.PI * 2);
+  ctx.ellipse(73, 51, 16, 9, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = 4.5;
+  ctx.lineCap = 'round';
+  for (const side of [-1, 1]) {
+    for (const offset of [-16, 0, 16]) {
+      ctx.beginPath();
+      ctx.moveTo(side * 72, 35 + offset);
+      ctx.lineTo(side * 113, 27 + offset * 1.25);
+      ctx.stroke();
+    }
+  }
+  drawBow(70, -93, 0.7, 1);
+
+  ctx.fillStyle = '#ffe5ef';
+  ctx.beginPath();
+  ctx.moveTo(1, 158);
+  ctx.bezierCurveTo(-24, 136, -35, 160, 1, 184);
+  ctx.bezierCurveTo(36, 160, 23, 136, 1, 158);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  for (let i = 0; i < 520; i++) {
+    const x = (i * 73 + 17) % size;
+    const y = (i * 131 + 29) % size;
+    ctx.strokeStyle = i % 2 ? 'rgba(255,255,255,0.045)' : 'rgba(45,20,38,0.035)';
+    ctx.lineWidth = 0.7;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + 5 + (i % 8), y + 2 + (i % 4));
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -276,129 +528,7 @@ export function getKitePatternTexture(patternId) {
     }
     ctx.restore();
   } else if (pattern.id === 'hello_kitty') {
-    // Pink tissue-paper background with a hand-cut Hello Kitty face and bow.
-    const pinkWash = ctx.createLinearGradient(0, 0, size, size);
-    pinkWash.addColorStop(0, '#ffe7f0');
-    pinkWash.addColorStop(0.52, '#ffc5dc');
-    pinkWash.addColorStop(1, '#fff0f6');
-    ctx.fillStyle = pinkWash;
-    ctx.fillRect(0, 0, size, size);
-
-    // Small hearts and diagonal pink silk strips around the face.
-    ctx.save();
-    ctx.strokeStyle = 'rgba(226, 72, 137, 0.23)';
-    ctx.lineWidth = 12;
-    for (let x = -size; x < size * 2; x += 74) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x - size * 0.42, size);
-      ctx.stroke();
-    }
-    const drawHeart = (x, y, scale) => {
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.scale(scale, scale);
-      ctx.fillStyle = '#f28ab7';
-      ctx.beginPath();
-      ctx.moveTo(0, 15);
-      ctx.bezierCurveTo(-48, -12, -25, -42, 0, -20);
-      ctx.bezierCurveTo(25, -42, 48, -12, 0, 15);
-      ctx.fill();
-      ctx.restore();
-    };
-    drawHeart(86, 100, 0.62);
-    drawHeart(423, 92, 0.58);
-    drawHeart(82, 405, 0.54);
-    drawHeart(432, 410, 0.66);
-    ctx.restore();
-
-    // Kitty ears and rounded white face, outlined like a sewn paper applique.
-    ctx.save();
-    ctx.fillStyle = '#fffafd';
-    ctx.strokeStyle = '#392735';
-    ctx.lineWidth = 9;
-    ctx.beginPath();
-    ctx.moveTo(cx - 91, cy - 29);
-    ctx.lineTo(cx - 123, cy - 145);
-    ctx.quadraticCurveTo(cx - 128, cy - 166, cx - 105, cy - 157);
-    ctx.lineTo(cx - 38, cy - 109);
-    ctx.quadraticCurveTo(cx, cy - 124, cx + 38, cy - 109);
-    ctx.lineTo(cx + 105, cy - 157);
-    ctx.quadraticCurveTo(cx + 128, cy - 166, cx + 123, cy - 145);
-    ctx.lineTo(cx + 91, cy - 29);
-    ctx.bezierCurveTo(cx + 133, cy + 13, cx + 118, cy + 112, cx + 43, cy + 132);
-    ctx.quadraticCurveTo(cx, cy + 148, cx - 43, cy + 132);
-    ctx.bezierCurveTo(cx - 118, cy + 112, cx - 133, cy + 13, cx - 91, cy - 29);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    // Pink inner ears.
-    ctx.fillStyle = '#f7a7c8';
-    ctx.beginPath();
-    ctx.moveTo(cx - 103, cy - 124);
-    ctx.lineTo(cx - 67, cy - 99);
-    ctx.lineTo(cx - 93, cy - 70);
-    ctx.closePath();
-    ctx.moveTo(cx + 103, cy - 124);
-    ctx.lineTo(cx + 67, cy - 99);
-    ctx.lineTo(cx + 93, cy - 70);
-    ctx.closePath();
-    ctx.fill();
-
-    // Bow on the upper-right ear.
-    ctx.fillStyle = '#ed3f88';
-    ctx.strokeStyle = '#9f2458';
-    ctx.lineWidth = 7;
-    ctx.beginPath();
-    ctx.moveTo(cx + 68, cy - 91);
-    ctx.bezierCurveTo(cx + 34, cy - 147, cx + 77, cy - 177, cx + 119, cy - 147);
-    ctx.bezierCurveTo(cx + 145, cy - 126, cx + 112, cy - 98, cx + 91, cy - 90);
-    ctx.bezierCurveTo(cx + 135, cy - 80, cx + 157, cy - 46, cx + 124, cy - 30);
-    ctx.bezierCurveTo(cx + 96, cy - 17, cx + 76, cy - 52, cx + 68, cy - 91);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = '#ffb2d0';
-    ctx.beginPath();
-    ctx.ellipse(cx + 82, cy - 87, 15, 18, -0.18, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    // Eyes, yellow nose, blush and the six signature whiskers.
-    ctx.fillStyle = '#241d27';
-    ctx.beginPath();
-    ctx.ellipse(cx - 43, cy + 13, 8, 15, 0, 0, Math.PI * 2);
-    ctx.ellipse(cx + 43, cy + 13, 8, 15, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#f7c94b';
-    ctx.beginPath();
-    ctx.ellipse(cx, cy + 38, 11, 8, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#c28c23';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-
-    ctx.fillStyle = 'rgba(244, 139, 180, 0.55)';
-    ctx.beginPath();
-    ctx.ellipse(cx - 76, cy + 49, 18, 10, 0, 0, Math.PI * 2);
-    ctx.ellipse(cx + 76, cy + 49, 18, 10, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.strokeStyle = '#392735';
-    ctx.lineWidth = 5;
-    ctx.lineCap = 'round';
-    const whiskers = [
-      [-73, 22, -122, 8], [-76, 39, -129, 39], [-72, 56, -120, 72],
-      [73, 22, 122, 8], [76, 39, 129, 39], [72, 56, 120, 72]
-    ];
-    for (const [x1, y1, x2, y2] of whiskers) {
-      ctx.beginPath();
-      ctx.moveTo(cx + x1, cy + y1);
-      ctx.lineTo(cx + x2, cy + y2);
-      ctx.stroke();
-    }
-    ctx.restore();
+    drawHelloKittyArtwork(ctx, size);
   } else {
     // Geometria Verde-Limão: concentric V-chevrons ("Peixinho listrado")
     const bands = [c3, c2, c1, c4, c3, c1, c2, c4];
@@ -418,11 +548,11 @@ export function getKitePatternTexture(patternId) {
     });
   }
 
-  addSilkPaperGrain(ctx, size);
+  if (pattern.id !== 'hello_kitty') addSilkPaperGrain(ctx, size);
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 8;
+  tex.anisotropy = 4;
   textureCache.set(`kite_${patternId}`, tex);
   return tex;
 }

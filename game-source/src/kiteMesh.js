@@ -106,8 +106,11 @@ export class KiteVisual {
   _buildKiteBody() {
     // Clear previous children if rebuilding in Oficina
     while (this.kiteBody.children.length > 0) {
-      const ch = this.kiteBody.children.pop();
+      const ch = this.kiteBody.children[this.kiteBody.children.length - 1];
+      this.kiteBody.remove(ch);
       if (ch.geometry) ch.geometry.dispose();
+      const materials = Array.isArray(ch.material) ? ch.material : [ch.material];
+      for (const material of materials) material?.dispose();
     }
 
     const spec = KITE_MODELS[this.modelId];

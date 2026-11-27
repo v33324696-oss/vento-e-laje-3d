@@ -119,7 +119,7 @@ export class GameWorld {
     this.araCharacterQueue = [];
     this.araCharacterLoads = 0;
     this.araCharacterConcurrency = 1;
-    this.araCharacterDetailBudget = this.isMobilePerformance ? 0 : 8;
+    this.araCharacterDetailBudget = this.isMobilePerformance ? 0 : 2;
     this.araDetailedNpcCount = 0;
     this.playerMoveSpeed = 0;
     this.cloudMaterial = null;
@@ -1331,8 +1331,10 @@ export class GameWorld {
     const foliageMats = foliageColors.map(
       (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 })
     );
+    const treeTrunkGeometry = new THREE.CylinderGeometry(0.18, 0.28, 3.4, 7);
+    const treeCrownGeometry = new THREE.DodecahedronGeometry(1, 0);
 
-    const treeCount = this.isMobilePerformance ? 19 : 38;
+    const treeCount = this.isMobilePerformance ? 12 : 24;
     for (let i = 0; i < treeCount; i++) {
       const angle = rand() * Math.PI * 2;
       const radius = 26 + rand() * 115;
@@ -1348,14 +1350,15 @@ export class GameWorld {
       const tree = new THREE.Group();
       tree.position.set(tx, ty, tz);
 
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, 3.4, 7), trunkMat);
+      const trunk = new THREE.Mesh(treeTrunkGeometry, trunkMat);
       trunk.position.y = 1.7;
       tree.add(trunk);
 
       const fMat = foliageMats[i % 7 === 0 ? 2 : i % 11 === 0 ? 3 : i % 2];
-      const crown = new THREE.Mesh(new THREE.DodecahedronGeometry(1.9 + rand() * 1.1, 1), fMat);
+      const crown = new THREE.Mesh(treeCrownGeometry, fMat);
+      const crownScale = 1.9 + rand() * 1.1;
       crown.position.y = 3.8 + rand() * 0.6;
-      crown.scale.y = 0.78;
+      crown.scale.set(crownScale, crownScale * 0.78, crownScale);
       crown.castShadow = true;
       tree.add(crown);
 
@@ -1370,7 +1373,7 @@ export class GameWorld {
       [24, -34, 0xf8fafc], [-21, -57, 0x7c3aed], [24, -68, 0xdc2626],
       [-21, -84, 0x0e7490], [24, -96, 0x854d0e], [7, -12, 0x475569]
     ];
-    streetPeople.slice(0, this.isMobilePerformance ? 8 : streetPeople.length).forEach(([x, z, shirt], index) => {
+    streetPeople.slice(0, this.isMobilePerformance ? 5 : 8).forEach(([x, z, shirt], index) => {
       this._addAmbientWalker(
         this.scene, x, z, shirt,
         index * 1.17,
@@ -1425,12 +1428,12 @@ export class GameWorld {
       opacity: 0.9
     });
     this.cloudMaterial = cloudMat;
-    const puffGeo = new THREE.DodecahedronGeometry(1, this.isMobilePerformance ? 0 : 2);
+    const puffGeo = new THREE.DodecahedronGeometry(1, 0);
 
-    const cloudCount = this.isMobilePerformance ? 8 : 18;
+    const cloudCount = this.isMobilePerformance ? 5 : 10;
     for (let i = 0; i < cloudCount; i++) {
       const cloud = new THREE.Group();
-      const puffs = this.isMobilePerformance ? 3 + (i % 2) : 4 + (i % 4);
+      const puffs = this.isMobilePerformance ? 2 + (i % 2) : 3 + (i % 2);
       for (let p = 0; p < puffs; p++) {
         const m = new THREE.Mesh(puffGeo, cloudMat);
         const sx = 8 + Math.random() * 10;
@@ -1459,7 +1462,7 @@ export class GameWorld {
     birdGeo.computeVertexNormals();
     const birdMat = new THREE.MeshBasicMaterial({ color: 0x1e293b, side: THREE.DoubleSide });
 
-    const birdCount = this.isMobilePerformance ? 4 : 10;
+    const birdCount = this.isMobilePerformance ? 3 : 6;
     for (let i = 0; i < birdCount; i++) {
       const bird = new THREE.Mesh(birdGeo, birdMat);
       this.scene.add(bird);

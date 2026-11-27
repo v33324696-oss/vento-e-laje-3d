@@ -48,7 +48,7 @@ class Pipa3DGame {
     // Player customization
     this.playerConfig = {
       modelId: 'murcha',
-      patternId: 'hello_kitty',
+      patternId: 'estrela_paulista',
       lineTypeId: 'rosa_chilena',
       tailStyle: 'padrao'
     };
@@ -91,6 +91,10 @@ class Pipa3DGame {
     // Active entities
     this.rivals = [];
     this.driftingKites = [];
+    this._activeCollisionKites = [];
+    this._combatBounds = new Float32Array(7 * 6);
+    this._closestPlayerPoint = new THREE.Vector3();
+    this._closestRivalPoint = new THREE.Vector3();
     this.bannerTimeout = null;
     this.lastCutTargetPos = null;
     this.lastReloDistance = Infinity;
@@ -138,13 +142,13 @@ class Pipa3DGame {
     this.camera.lookAt(this.camLookTarget);
 
     this.isMobileLayout = window.matchMedia('(max-width: 820px), (pointer: coarse)').matches;
-    this.frameInterval = this.isMobileLayout ? 1000 / 30 : 1000 / 45;
+    this.frameInterval = 1000 / 60;
     this.renderer = new THREE.WebGLRenderer({
       antialias: false,
       powerPreference: 'high-performance'
     });
     this.renderer.setSize(w, h);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.isMobileLayout ? 0.68 : 1.15));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.isMobileLayout ? 0.82 : 1.0));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.96;
@@ -399,7 +403,7 @@ class Pipa3DGame {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.isMobileLayout = window.matchMedia('(max-width: 820px), (pointer: coarse)').matches;
-    this.frameInterval = this.isMobileLayout ? 1000 / 30 : 1000 / 45;
+    this.frameInterval = 1000 / 60;
     this._applyGraphicsQuality(this.graphicsQuality || 'performance', false);
 
     this.playerKite.setResolution(w, h);
@@ -527,7 +531,7 @@ class Pipa3DGame {
 
     // Graphics profile adapts render scale and shadows to the device.
     const qualitySelect = document.getElementById('graphics-quality');
-    const graphicsStorageKey = this.isMobileLayout ? 'vento-laje-graphics-mobile' : 'vento-laje-graphics';
+    const graphicsStorageKey = this.isMobileLayout ? 'vento-laje-graphics-mobile-v2' : 'vento-laje-graphics-v2';
     let savedQuality = 'performance';
     try { savedQuality = localStorage.getItem(graphicsStorageKey) || savedQuality; } catch {}
     if (!['performance', 'balanced', 'high'].includes(savedQuality)) {
@@ -1036,9 +1040,9 @@ class Pipa3DGame {
 
   _applyGraphicsQuality(level = 'balanced', persist = true) {
     const presets = {
-      performance: { desktopRatio: 1.15, mobileRatio: 0.68, shadows: false },
-      balanced: { desktopRatio: 1.35, mobileRatio: 0.82, shadows: false },
-      high: { desktopRatio: 1.7, mobileRatio: 0.95, shadows: true }
+      performance: { desktopRatio: 1.0, mobileRatio: 0.82, shadows: false },
+      balanced: { desktopRatio: 1.12, mobileRatio: 0.9, shadows: false },
+      high: { desktopRatio: 1.25, mobileRatio: 1.0, shadows: false }
     };
     const preset = presets[level] || presets.balanced;
     const maxRatio = this.isMobileLayout ? preset.mobileRatio : preset.desktopRatio;
@@ -1051,7 +1055,7 @@ class Pipa3DGame {
     for (const rival of this.rivals) rival.kite.setResolution(window.innerWidth, window.innerHeight);
     this.graphicsQuality = level;
     if (persist) {
-      const graphicsStorageKey = this.isMobileLayout ? 'vento-laje-graphics-mobile' : 'vento-laje-graphics';
+      const graphicsStorageKey = this.isMobileLayout ? 'vento-laje-graphics-mobile-v2' : 'vento-laje-graphics-v2';
       try { localStorage.setItem(graphicsStorageKey, level); } catch {}
     }
   }
@@ -1935,15 +1939,16 @@ class Pipa3DGame {
     const activeRivals = this._getActiveRivals();
     for (const r of activeRivals) r.kite.inRelo = false;
 
-    const activeKites = [];
+    const activeKites = this._activeCollisionKites;
+    activeKites.length = 0;
     if (this.playerKite.active) activeKites.push(this.playerKite);
     for (const r of activeRivals) {
       if (r.kite.active) activeKites.push(r.kite);
     }
 
     let closestPlayerDist = Infinity;
-    let closestPlayerPt = new THREE.Vector3();
-    let closestRivalPt = new THREE.Vector3();
+    const closestPlayerPt = this._closestPlayerPoint;
+    const closestRivalPt = this._closestRivalPoint;
     let closestPlayerU = -1;
     let closestPlayerCrossingQuality = 0;
     let closestPlayerOpponentIntegrity = 1;
@@ -1986,12 +1991,47 @@ class Pipa3DGame {
       return { reloIntensity: 0, reloSpeed: 0, playerHighlightU: -1 };
     }
 
+    // Build conservative bounds around each string and its rabiola.
+    // If two bounds are farther apart than 1.8m, neither a relo nor a tail cut can occur.
+    const bounds = this._combatBounds;
+    for (let index = 0; index < activeKites.length; index++) {
+      const kite = activeKites[index];
+      let minX = Infinity, minY = Infinity, minZ = Infinity;
+      let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+      for (let nodeIndex = 5; nodeIndex <= STRING_SEGMENTS; nodeIndex++) {
+        const node = kite.stringNodes[nodeIndex];
+        minX = Math.min(minX, node.x); minY = Math.min(minY, node.y); minZ = Math.min(minZ, node.z);
+        maxX = Math.max(maxX, node.x); maxY = Math.max(maxY, node.y); maxZ = Math.max(maxZ, node.z);
+      }
+      const tailNodes = kite.visual.tailNodes;
+      for (let nodeIndex = 0; nodeIndex < kite.visual.activeTailNodes; nodeIndex++) {
+        const node = tailNodes[nodeIndex];
+        minX = Math.min(minX, node.x); minY = Math.min(minY, node.y); minZ = Math.min(minZ, node.z);
+        maxX = Math.max(maxX, node.x); maxY = Math.max(maxY, node.y); maxZ = Math.max(maxZ, node.z);
+      }
+      const offset = index * 6;
+      bounds[offset] = minX; bounds[offset + 1] = minY; bounds[offset + 2] = minZ;
+      bounds[offset + 3] = maxX; bounds[offset + 4] = maxY; bounds[offset + 5] = maxZ;
+    }
+
     // 2. Pairwise 3D String Collision ("Relo") & Tail Cutting ("Rabicó")
     for (let a = 0; a < activeKites.length; a++) {
       for (let b = a + 1; b < activeKites.length; b++) {
         const kA = activeKites[a];
         const kB = activeKites[b];
         if (!kA.active || !kB.active) continue;
+
+        const offsetA = a * 6;
+        const offsetB = b * 6;
+        const reach = 1.8;
+        if (
+          bounds[offsetA + 3] + reach < bounds[offsetB] ||
+          bounds[offsetB + 3] + reach < bounds[offsetA] ||
+          bounds[offsetA + 4] + reach < bounds[offsetB + 1] ||
+          bounds[offsetB + 4] + reach < bounds[offsetA + 1] ||
+          bounds[offsetA + 5] + reach < bounds[offsetB + 2] ||
+          bounds[offsetB + 5] + reach < bounds[offsetA + 2]
+        ) continue;
 
         let minDist = Infinity;
         let bestI = 14;
@@ -2745,7 +2785,8 @@ class Pipa3DGame {
       gameMode: this.gameMode,
       tournamentWave: this.tournamentWave
     });
-    for (const r of this._getActiveRivals()) {
+    const simulationRivals = this.started ? this._getActiveRivals() : [];
+    for (const r of simulationRivals) {
       const aiControls = r.ai.update({
         playerKite: this.playerKite,
         allRivals: this.rivals,

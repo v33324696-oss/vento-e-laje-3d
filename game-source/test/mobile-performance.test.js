@@ -6,17 +6,20 @@ const mainSource = readFileSync(new URL('../src/main.js', import.meta.url), 'utf
 const worldSource = readFileSync(new URL('../src/world.js', import.meta.url), 'utf8');
 
 test('mobile devices get a separate performance-first graphics preference', () => {
-  assert.match(mainSource, /this\.isMobileLayout \? 'vento-laje-graphics-mobile' : 'vento-laje-graphics'/);
+  assert.match(mainSource, /vento-laje-graphics-mobile-v2/);
   assert.match(mainSource, /let savedQuality = 'performance'/);
-  assert.match(mainSource, /mobileRatio: 0\.68/);
+  assert.match(mainSource, /mobileRatio: 0\.82/);
   assert.match(mainSource, /this\.isMobileLayout \? false : preset\.shadows/);
   assert.match(mainSource, /antialias: false/);
-  assert.match(mainSource, /this\.frameInterval = this\.isMobileLayout \? 1000 \/ 30 : 1000 \/ 45/);
+  assert.match(mainSource, /this\.frameInterval = 1000 \/ 60/);
   assert.match(mainSource, /if \(document\.hidden\)/);
-  assert.match(mainSource, /patternId: 'hello_kitty'/);
+  assert.match(mainSource, /this\._combatBounds = new Float32Array\(7 \* 6\)/);
+  assert.match(mainSource, /bounds\[offsetA \+ 3\] \+ reach < bounds\[offsetB\]/);
+  assert.match(mainSource, /this\.started \? this\._getActiveRivals\(\) : \[\]/);
+  assert.match(mainSource, /patternId: 'estrela_paulista'/);
   assert.match(worldSource, /detail: this\.isMobilePerformance \? 'low' : 'high'/);
   assert.match(worldSource, /this\.araCharacterConcurrency = 1/);
-  assert.match(worldSource, /this\.araCharacterDetailBudget = this\.isMobilePerformance \? 0 : 8/);
+  assert.match(worldSource, /this\.araCharacterDetailBudget = this\.isMobilePerformance \? 0 : 2/);
   assert.match(worldSource, /this\.araDetailedNpcCount >= this\.araCharacterDetailBudget/);
 });
 
@@ -32,8 +35,8 @@ test('mobile scene keeps the full player but skips low-detail background rigs', 
 
 test('mobile scene lowers environment geometry, density and particle counts', () => {
   assert.match(worldSource, /this\.isMobilePerformance \? 36 : 72/);
-  assert.match(worldSource, /this\.isMobilePerformance \? 8 : 18/);
-  assert.match(worldSource, /this\.isMobilePerformance \? 4 : 10/);
+  assert.match(worldSource, /this\.isMobilePerformance \? 5 : 10/);
+  assert.match(worldSource, /this\.isMobilePerformance \? 3 : 6/);
   assert.match(worldSource, /this\.isMobilePerformance \? 150 : 420/);
 });
 
