@@ -67,3 +67,10 @@ test('releasing the line does not actively push the kite outward', () => {
   const response = calculateWinchResponse(-2, 5.2, 1 / 60, { pullResponse: 4.8 });
   assert.equal(response.velocityChange, 0);
 });
+
+test('poorly maintained kites bend more under the same wind load', () => {
+  const maintained = calculateStructuralResponse(60, 'murcha', 100);
+  const worn = calculateStructuralResponse(60, 'murcha', 35);
+  assert.ok(worn.strain > maintained.strain);
+  assert.ok(worn.damageFactor > maintained.damageFactor);
+});
