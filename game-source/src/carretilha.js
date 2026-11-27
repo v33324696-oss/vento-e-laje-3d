@@ -53,6 +53,10 @@ export const LINE_TYPES = {
   linha_chilena_arcade: {
     id: 'linha_chilena_arcade', name: 'Linha chilena (arcade)', color: 0xf43f5e, hex: '#f43f5e',
     cutPower: 1.02, drag: 1.04, desc: 'Item fictício de competição dentro do jogo; não representa fabricação nem uso real.', durability: 0.8, recovery: 0.34
+  },
+  linha_descarga: {
+    id: 'linha_descarga', name: 'Linha de descarga', color: 0x60a5fa, hex: '#60a5fa',
+    cutPower: 0.74, drag: 0.82, desc: 'Linha especializada em descarregar com menor vulnerabilidade durante a soltura.', durability: 1.06, recovery: 0.66, dischargeSafe: true
   }
 };
 
