@@ -137,6 +137,9 @@ class Pipa3DGame {
   }
 
   _initEntities() {
+    // Face the open sky by default so a stationary manual launch points away from the roof.
+    this.world.playerAvatar.rotation.y = Math.PI;
+
     // Player 3D Carretilha & Kite
     this.carretilha = new Carretilha3D(this.scene, new THREE.Vector3(0, 10.85, 13.85));
     this.carretilha.setLineColor(LINE_TYPES[this.playerConfig.lineTypeId].hex);
@@ -429,7 +432,7 @@ class Pipa3DGame {
     this.selectedMap = this.world.mapId;
     const spawn = result.spawn;
     this.world.playerAvatar.position.copy(spawn);
-    this.world.playerAvatar.rotation.set(0, 0, 0);
+    this.world.playerAvatar.rotation.set(0, Math.PI, 0);
     this.carretilha.baseWorldPos.copy(spawn).add(new THREE.Vector3(0, 1.12, 0));
     this.carretilha.root.position.copy(this.carretilha.baseWorldPos);
     this.carretilha.root.rotation.set(0, 0, 0);
