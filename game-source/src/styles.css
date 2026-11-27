@@ -1505,3 +1505,52 @@ button { touch-action: manipulation; }
   .rabiola-lock-card p { font-size: 12px; }
   .rabiola-lock-action { min-height: 54px; }
 }
+
+
+/* Player home, garage maintenance and cinematic replay */
+.garage-card {
+  width: min(780px, calc(100vw - 26px));
+  max-height: min(88vh, 850px);
+  overflow-y: auto;
+  padding: 22px;
+  background: var(--bg-glass-strong);
+  border: 1px solid rgba(250,204,21,.28);
+  border-radius: 18px;
+}
+.garage-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0,1fr));
+  gap: 8px;
+  margin: 4px 0 20px;
+}
+.garage-summary > div {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 12px; border: 1px solid rgba(255,255,255,.1);
+  border-radius: 11px; background: rgba(255,255,255,.045);
+}
+.garage-summary small { color: var(--text-muted); font-size: 8px; font-weight: 900; letter-spacing: .07em; }
+.garage-summary strong { color: var(--gold); font-size: 18px; }
+.garage-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.garage-section-head h3 { color: white; font-size: 17px; margin-top: 3px; }
+.garage-kite-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; }
+.garage-kite-card {
+  display: flex; flex-direction: column; gap: 8px; padding: 13px;
+  border: 1px solid rgba(255,255,255,.13); border-radius: 12px;
+  background: rgba(255,255,255,.045);
+}
+.garage-kite-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.garage-kite-head strong { color: white; font-size: 12px; }
+.garage-kite-head span { color: var(--gold); font-size: 12px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.garage-condition { height: 7px; overflow: hidden; border-radius: 99px; background: rgba(255,255,255,.1); }
+.garage-condition i { display: block; height: 100%; border-radius: inherit; }
+.garage-kite-card small { color: var(--text-muted); font-size: 10px; }
+.garage-repair { width: 100%; padding: 9px 10px; font-size: 10px; }
+.garage-repair:disabled, #btn-upgrade-house:disabled { opacity: .48; cursor: default; }
+.garage-note, .garage-empty { margin-top: 14px; color: var(--text-muted); font-size: 11px; line-height: 1.5; }
+@media(max-width:600px) {
+  .garage-card { padding: 16px 13px; }
+  .garage-summary { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .garage-kite-grid { grid-template-columns: 1fr; }
+  .garage-section-head { align-items: stretch; flex-direction: column; }
+  .garage-section-head button { width: 100%; }
+}
