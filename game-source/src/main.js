@@ -120,6 +120,7 @@ class Pipa3DGame {
 
     this.lastFrameMs = performance.now();
     this.elapsedTime = 0;
+    this.hudUpdateAccumulator = 0;
     this._animate = this._animate.bind(this);
     requestAnimationFrame(this._animate);
   }
@@ -141,16 +142,18 @@ class Pipa3DGame {
       powerPreference: 'high-performance'
     });
     this.renderer.setSize(w, h);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.isMobileLayout ? 1.35 : 1.8));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.isMobileLayout ? 0.85 : 1.8));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.96;
-    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.enabled = !this.isMobileLayout;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
     this.container.appendChild(this.renderer.domElement);
 
-    this.world = new GameWorld(this.scene, this.renderer);
+    this.world = new GameWorld(this.scene, this.renderer, {
+      mobilePerformance: this.isMobileLayout
+    });
     this.effects = new SkyEffectsManager(this.scene);
 
     window.addEventListener('resize', () => this._onResize());
@@ -393,9 +396,8 @@ class Pipa3DGame {
     this.resolution.set(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(w, h);
     this.isMobileLayout = window.matchMedia('(max-width: 820px), (pointer: coarse)').matches;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.isMobileLayout ? 1.35 : 1.8));
+    this._applyGraphicsQuality(this.graphicsQuality || (this.isMobileLayout ? 'performance' : 'balanced'), false);
 
     this.playerKite.setResolution(w, h);
     for (const r of this.rivals) {
@@ -522,9 +524,12 @@ class Pipa3DGame {
 
     // Graphics profile adapts render scale and shadows to the device.
     const qualitySelect = document.getElementById('graphics-quality');
-    let savedQuality = 'balanced';
-    try { savedQuality = localStorage.getItem('vento-laje-graphics') || savedQuality; } catch {}
-    if (!['performance', 'balanced', 'high'].includes(savedQuality)) savedQuality = 'balanced';
+    const graphicsStorageKey = this.isMobileLayout ? 'vento-laje-graphics-mobile' : 'vento-laje-graphics';
+    let savedQuality = this.isMobileLayout ? 'performance' : 'balanced';
+    try { savedQuality = localStorage.getItem(graphicsStorageKey) || savedQuality; } catch {}
+    if (!['performance', 'balanced', 'high'].includes(savedQuality)) {
+      savedQuality = this.isMobileLayout ? 'performance' : 'balanced';
+    }
     qualitySelect.value = savedQuality;
     this._applyGraphicsQuality(savedQuality, false);
     qualitySelect.addEventListener('change', () => this._applyGraphicsQuality(qualitySelect.value));
@@ -1028,21 +1033,23 @@ class Pipa3DGame {
 
   _applyGraphicsQuality(level = 'balanced', persist = true) {
     const presets = {
-      performance: { desktopRatio: 1.05, mobileRatio: 0.9, shadows: false },
-      balanced: { desktopRatio: 1.55, mobileRatio: 1.2, shadows: true },
-      high: { desktopRatio: 2.0, mobileRatio: 1.5, shadows: true }
+      performance: { desktopRatio: 1.05, mobileRatio: 0.78, shadows: false },
+      balanced: { desktopRatio: 1.55, mobileRatio: 0.96, shadows: true },
+      high: { desktopRatio: 2.0, mobileRatio: 1.15, shadows: true }
     };
     const preset = presets[level] || presets.balanced;
     const maxRatio = this.isMobileLayout ? preset.mobileRatio : preset.desktopRatio;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxRatio));
-    this.renderer.shadowMap.enabled = preset.shadows;
+    // Mobile GPUs benefit more from stable frame times than from dynamic shadows.
+    this.renderer.shadowMap.enabled = this.isMobileLayout ? false : preset.shadows;
     this.renderer.shadowMap.needsUpdate = true;
     this.renderer.setSize(window.innerWidth, window.innerHeight, false);
     this.playerKite.setResolution(window.innerWidth, window.innerHeight);
     for (const rival of this.rivals) rival.kite.setResolution(window.innerWidth, window.innerHeight);
     this.graphicsQuality = level;
     if (persist) {
-      try { localStorage.setItem('vento-laje-graphics', level); } catch {}
+      const graphicsStorageKey = this.isMobileLayout ? 'vento-laje-graphics-mobile' : 'vento-laje-graphics';
+      try { localStorage.setItem(graphicsStorageKey, level); } catch {}
     }
   }
 
@@ -2797,7 +2804,11 @@ class Pipa3DGame {
     });
 
     if (this.started) {
-      this._updateHUD();
+      this.hudUpdateAccumulator += dt;
+      if (this.hudUpdateAccumulator >= 0.1) {
+        this._updateHUD();
+        this.hudUpdateAccumulator %= 0.1;
+      }
     }
 
     } catch (error) {

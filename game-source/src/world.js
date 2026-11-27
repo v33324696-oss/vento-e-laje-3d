@@ -99,9 +99,11 @@ export const WEATHER_PRESETS = {
 };
 
 export class GameWorld {
-  constructor(scene, renderer) {
+  constructor(scene, renderer, options = {}) {
     this.scene = scene;
     this.renderer = renderer;
+    this.isMobilePerformance = Boolean(options.mobilePerformance);
+    this.environmentUpdateAccumulator = 0;
     this.sunDir = new THREE.Vector3(0, 0.5, -0.86).normalize();
     this.rivalSpots = [];
     this.clouds = [];
@@ -144,7 +146,7 @@ export class GameWorld {
 
   _initLightingAndSky() {
     // Rich Atmospheric Gradient + Solar Aureole Sky Dome Shader
-    const skyGeo = new THREE.SphereGeometry(950, 32, 24);
+    const skyGeo = new THREE.SphereGeometry(950, this.isMobilePerformance ? 20 : 32, this.isMobilePerformance ? 16 : 24);
     this.skyUniforms = {
       uZenith: { value: new THREE.Color(0x0369a1) },
       uMidSky: { value: new THREE.Color(0x38bdf8) },
@@ -313,7 +315,8 @@ export class GameWorld {
   }
 
   _buildTerrainAndStreets() {
-    const terrainGeo = new THREE.PlaneGeometry(640, 640, 72, 72);
+    const terrainSegments = this.isMobilePerformance ? 36 : 72;
+    const terrainGeo = new THREE.PlaneGeometry(640, 640, terrainSegments, terrainSegments);
     terrainGeo.rotateX(-Math.PI / 2);
     const pos = terrainGeo.attributes.position;
     const colors = new Float32Array(pos.count * 3);
@@ -526,6 +529,14 @@ export class GameWorld {
 
   _queueAraCharacter(avatar, profile, options = {}) {
     if (!avatar || !profile) return;
+    if (this.isMobilePerformance && options.detail === 'low') {
+      // Keep the detailed handcrafted fallback for background residents on phones.
+      // Only the player's full rigged character is loaded on mobile.
+      avatar.userData.araLoading = false;
+      avatar.userData.araSkippedForMobile = true;
+      avatar.visible = true;
+      return;
+    }
     avatar.userData.araLoading = true;
     avatar.userData.araReady = false;
     avatar.visible = false;
@@ -1268,8 +1279,11 @@ export class GameWorld {
     const gridX = [-68, -52, -36, -13, 0, 13, 36, 52, 68];
     const gridZ = [15, -12, -26, -40, -56, -74, -92];
 
-    for (const gx of gridX) {
-      for (const gz of gridZ) {
+    for (let xIndex = 0; xIndex < gridX.length; xIndex++) {
+      const gx = gridX[xIndex];
+      for (let zIndex = 0; zIndex < gridZ.length; zIndex++) {
+        const gz = gridZ[zIndex];
+        if (this.isMobilePerformance && (xIndex + zIndex) % 2 === 1) continue;
         // Skip player house slot
         if (Math.abs(gx) < 8 && Math.abs(gz - 15) < 8) continue;
         // Skip streets
@@ -1309,7 +1323,8 @@ export class GameWorld {
       (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 })
     );
 
-    for (let i = 0; i < 38; i++) {
+    const treeCount = this.isMobilePerformance ? 19 : 38;
+    for (let i = 0; i < treeCount; i++) {
       const angle = rand() * Math.PI * 2;
       const radius = 26 + rand() * 115;
       const tx = Math.cos(angle) * radius;
@@ -1346,7 +1361,7 @@ export class GameWorld {
       [24, -34, 0xf8fafc], [-21, -57, 0x7c3aed], [24, -68, 0xdc2626],
       [-21, -84, 0x0e7490], [24, -96, 0x854d0e], [7, -12, 0x475569]
     ];
-    streetPeople.forEach(([x, z, shirt], index) => {
+    streetPeople.slice(0, this.isMobilePerformance ? 8 : streetPeople.length).forEach(([x, z, shirt], index) => {
       this._addAmbientWalker(
         this.scene, x, z, shirt,
         index * 1.17,
@@ -1401,11 +1416,12 @@ export class GameWorld {
       opacity: 0.9
     });
     this.cloudMaterial = cloudMat;
-    const puffGeo = new THREE.DodecahedronGeometry(1, 2);
+    const puffGeo = new THREE.DodecahedronGeometry(1, this.isMobilePerformance ? 0 : 2);
 
-    for (let i = 0; i < 18; i++) {
+    const cloudCount = this.isMobilePerformance ? 8 : 18;
+    for (let i = 0; i < cloudCount; i++) {
       const cloud = new THREE.Group();
-      const puffs = 4 + (i % 4);
+      const puffs = this.isMobilePerformance ? 3 + (i % 2) : 4 + (i % 4);
       for (let p = 0; p < puffs; p++) {
         const m = new THREE.Mesh(puffGeo, cloudMat);
         const sx = 8 + Math.random() * 10;
@@ -1434,7 +1450,8 @@ export class GameWorld {
     birdGeo.computeVertexNormals();
     const birdMat = new THREE.MeshBasicMaterial({ color: 0x1e293b, side: THREE.DoubleSide });
 
-    for (let i = 0; i < 10; i++) {
+    const birdCount = this.isMobilePerformance ? 4 : 10;
+    for (let i = 0; i < birdCount; i++) {
       const bird = new THREE.Mesh(birdGeo, birdMat);
       this.scene.add(bird);
       this.birds.push({
@@ -1447,7 +1464,7 @@ export class GameWorld {
         speed: 0.32 + Math.random() * 0.25
       });
     }
-    const rainCount = 420;
+    const rainCount = this.isMobilePerformance ? 150 : 420;
     this.rainPositions = new Float32Array(rainCount * 3);
     for (let i = 0; i < rainCount; i++) {
       this.rainPositions[i * 3] = (Math.random() - 0.5) * 150;
@@ -1522,13 +1539,20 @@ export class GameWorld {
         human.character.update(dt);
       }
     }
-    this._updateDynamicDayCycle(dt);
+    let environmentDt = dt;
+    if (this.isMobilePerformance) {
+      this.environmentUpdateAccumulator += dt;
+      if (this.environmentUpdateAccumulator < 1 / 24) return;
+      environmentDt = this.environmentUpdateAccumulator;
+      this.environmentUpdateAccumulator = 0;
+    }
+    this._updateDynamicDayCycle(environmentDt);
 
     // Drift clouds with wind; overcast weather moves them more slowly.
     const cloudDrift = this.currentPreset.cloudDrift ?? 1;
     for (const c of this.clouds) {
-      c.group.position.x += windVec.x * c.speedFactor * cloudDrift * dt;
-      c.group.position.z += windVec.z * c.speedFactor * cloudDrift * dt;
+      c.group.position.x += windVec.x * c.speedFactor * cloudDrift * environmentDt;
+      c.group.position.z += windVec.z * c.speedFactor * cloudDrift * environmentDt;
       if (c.group.position.z < -390) c.group.position.z = 90;
       if (c.group.position.z > 100) c.group.position.z = -380;
       if (c.group.position.x < -250) c.group.position.x = 250;
@@ -1554,7 +1578,7 @@ export class GameWorld {
     }
 
     for (const vehicle of this.ambientVehicles) {
-      vehicle.group.position.x += vehicle.speed * dt;
+      vehicle.group.position.x += vehicle.speed * environmentDt;
       if (vehicle.group.position.x > 90) vehicle.group.position.x = -90;
       if (vehicle.group.position.x < -90) vehicle.group.position.x = 90;
       vehicle.group.position.y = this.getTerrainHeight(vehicle.group.position.x, vehicle.roadZ) + 0.02;
@@ -1581,8 +1605,8 @@ export class GameWorld {
         const speedX = Math.cos(phase) * person.speed * person.radius;
         const speedZ = -Math.sin(phase * 0.72) * person.speed * person.radius * 0.72 * 0.34;
         human.locomotion.speed = Math.min(1.65, Math.max(0.55, Math.hypot(speedX, speedZ) * 1.8));
-        human.mixer.update(dt);
-        human.character.update(dt);
+        human.mixer.update(environmentDt);
+        human.character.update(environmentDt);
       } else {
         const parts = person.avatar.userData.walkParts;
         if (parts) {
@@ -1609,9 +1633,9 @@ export class GameWorld {
     if (this.rainPoints?.visible && this.rainPositions) {
       const rain = this.rainPoints.geometry.attributes.position;
       for (let i = 0; i < this.rainPositions.length; i += 3) {
-        this.rainPositions[i] += windVec.x * dt * 0.42;
-        this.rainPositions[i + 1] -= 33 * dt;
-        this.rainPositions[i + 2] += windVec.z * dt * 0.2;
+        this.rainPositions[i] += windVec.x * environmentDt * 0.42;
+        this.rainPositions[i + 1] -= 33 * environmentDt;
+        this.rainPositions[i + 2] += windVec.z * environmentDt * 0.2;
         if (this.rainPositions[i + 1] < 0) {
           this.rainPositions[i + 1] = 48 + Math.random() * 30;
           this.rainPositions[i] = (Math.random() - 0.5) * 150;
