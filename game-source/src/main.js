@@ -578,6 +578,8 @@ class Pipa3DGame {
       largadaTagActive: this.playerKite.largadaTagTimer > 0,
       largadaQuality: this.playerKite.largadaQuality,
       linePower: this.playerKite.lineType.cutPower * this.playerKite.visual.spec.powerMult,
+      lineDurability: this.playerKite.lineType.durability || 1,
+      lineRecovery: this.playerKite.lineType.recovery || 0.45,
       lineIntegrity: this.playerKite.lineIntegrity
     });
   }
