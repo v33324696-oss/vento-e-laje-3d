@@ -165,7 +165,7 @@ function updateRoomRelo(room, dt, now) {
       );
       const activeMotion = Math.max(relativeSpeed, Math.abs(a.state.reelSpeed), Math.abs(b.state.reelSpeed), a.state.socada * 8, b.state.socada * 8, a.state.disque * 8, b.state.disque * 8, a.state.disbicar * 8, b.state.disbicar * 8);
 
-      if (contact.distance > 1.08 || crossingQuality < 0.19 || activeMotion < 1.25) {
+      if (contact.distance > 1.65 || crossingQuality < 0.08 || activeMotion < 0.95) {
         const existing = room.fights.get(key);
         if (existing && now - existing.lastTouch > 420) room.fights.delete(key);
         else if (existing) {
@@ -212,7 +212,7 @@ function updateRoomRelo(room, dt, now) {
         defenderExposure: a.state.reelSpeed > 5 && !a.state.lineDischargeSafe ? Math.max(0, Math.min(1, (a.state.reelSpeed - 5) / 22)) : 0
       });
 
-      const frictionFactor = 0.38 + crossingQuality * 0.18;
+      const frictionFactor = 0.50 + crossingQuality * 0.20;
       fight.integrityB -= scoreA * dt * frictionFactor / Math.max(0.55, b.state.lineDurability);
       fight.integrityA -= scoreB * dt * frictionFactor / Math.max(0.55, a.state.lineDurability);
       a.state.lineIntegrity = Math.max(0, fight.integrityA);
