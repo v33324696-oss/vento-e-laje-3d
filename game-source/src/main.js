@@ -15,6 +15,7 @@ import {
 import { RivalAIController } from './ai.js';
 import { evaluateReloScore } from './relo.js';
 import { ProgressionStore } from './progression.js';
+import { getAIDifficulty } from './difficulty.js';
 
 class Pipa3DGame {
   constructor() {
@@ -25,6 +26,7 @@ class Pipa3DGame {
     // Game state
     this.started = false;
     this.gameMode = 'festival'; // 'festival' | 'torneio' | 'zen'
+    this.matchDifficulty = 'normal';
     this.weatherOrder = ['tarde', 'pordosol', 'ventania'];
     this.weatherIdx = 0;
 
@@ -65,6 +67,9 @@ class Pipa3DGame {
       currX: 0
     };
     this.characterMode = false;
+    this.playerLaunched = false;
+    this.playerKiteInHand = false;
+    this.characterMoveSpeed = 0;
     this.selectedMap = 'laje';
     this.remotePlayers = new Map();
     this.lastNetSendMs = 0;
@@ -174,6 +179,117 @@ class Pipa3DGame {
       const ai = new RivalAIController(rivalKite, personalities[idx % personalities.length]);
       this.rivals.push({ kite: rivalKite, ai, previousReleaseHeld: false });
     });
+    this._preparePlayerKiteInHand();
+  }
+
+  _preparePlayerKiteInHand() {
+    this.playerLaunched = false;
+    this.playerKiteInHand = true;
+    this.playerKite.active = false;
+    this.playerKite.velocity.set(0, 0, 0);
+    this.playerKite.reelSpeed = 0;
+    this.playerKite.lineLength = 18;
+    this.playerKite.tension = 0.18;
+    this.playerKite.lineIntegrity = 1;
+    this.playerKite.inRelo = false;
+    this.playerKite.reloContactTime = 0;
+    this.playerKite.socadaBoost = 0;
+    this.playerKite.disqueBoost = 0;
+    this.playerKite.disbicarBoost = 0;
+    this.playerKite.lineMesh.visible = false;
+    this.playerKite.visual.setVisible(true);
+    this._updateHeldPlayerKite(0.016);
+  }
+
+  _updateHeldPlayerKite(dt = 0.016) {
+    if (!this.playerKiteInHand) return;
+    const avatar = this.world.playerAvatar;
+    this.carretilha.baseWorldPos.set(avatar.position.x, avatar.position.y + 1.12, avatar.position.z);
+    this.carretilha.root.position.copy(this.carretilha.baseWorldPos);
+    this.carretilha.root.rotation.set(0, avatar.rotation.y, 0);
+    this.carretilha.getLineExitWorldPosition(this.playerKite.anchorPos);
+    this.playerKite.position.copy(_heldKiteLocal).applyEuler(avatar.rotation).add(avatar.position);
+    this.playerKite.quaternion.setFromEuler(_heldKiteEuler.set(0, avatar.rotation.y, 0));
+    this.playerKite.visual.update({
+      position: this.playerKite.position,
+      quaternion: this.playerKite.quaternion,
+      aeroLoad: 0.12,
+      windVec: this.windVec,
+      sunDir: this.world.sunDir,
+      cameraPos: this.camera.position,
+      dt: Math.max(0.001, dt)
+    });
+    this.playerKite.visual.setVisible(true);
+    this.playerKite.lineMesh.visible = false;
+  }
+
+  _enterPreLaunchMode() {
+    this.characterMode = true;
+    this.world.playerAvatar.visible = true;
+    document.body.classList.add('character-mode');
+    document.getElementById('touch-char-controls')?.classList.remove('hidden');
+    document.getElementById('hud-bottom')?.classList.add('hud-hidden');
+    this.camModeIdx = this.cameraModes.findIndex((camera) => camera.id === 'personagem');
+    document.getElementById('label-camera').textContent = this.cameraModes[this.camModeIdx].label;
+    document.getElementById('label-explore').textContent = 'Preparar pipa';
+  }
+
+  _launchPlayerKite() {
+    if (!this.started || !this.playerKiteInHand) return;
+    const avatar = this.world.playerAvatar;
+    const runSpeed = THREE.MathUtils.clamp(this.characterMoveSpeed, 0, 8.2);
+    const forward = _launchForward.set(0, 0, 1).applyQuaternion(avatar.quaternion).normalize();
+
+    this.carretilha.baseWorldPos.set(avatar.position.x, avatar.position.y + 1.12, avatar.position.z);
+    this.carretilha.root.position.copy(this.carretilha.baseWorldPos);
+    this.carretilha.root.rotation.set(0, avatar.rotation.y, 0);
+    this.carretilha.getLineExitWorldPosition(this.playerKite.anchorPos);
+
+    this.playerKite.active = true;
+    this.playerKiteInHand = false;
+    this.playerLaunched = true;
+    this.playerKite.lineIntegrity = 1;
+    this.playerKite.lineLength = THREE.MathUtils.clamp(17 + runSpeed * 0.72, 16, 25);
+    this.playerKite.tension = 0.24;
+    this.playerKite.noseAngle = 0;
+    this.playerKite.angularVel = 0;
+    this.playerKite.socadaBoost = 0.12;
+    this.playerKite.disqueBoost = 0;
+    this.playerKite.disbicarBoost = 0;
+    this.playerKite.position.addScaledVector(forward, 1.15);
+    this.playerKite.position.y += 0.42;
+    this.playerKite.velocity.copy(forward).multiplyScalar(2.4 + runSpeed * 0.72);
+    this.playerKite.velocity.y += 1.25 + runSpeed * 0.30;
+    this.playerKite.velocity.addScaledVector(this.windVec, 0.16);
+    this.playerKite._updateOrientation(this.windVec);
+    this.playerKite.visual.update({
+      position: this.playerKite.position,
+      quaternion: this.playerKite.quaternion,
+      aeroLoad: 0.3,
+      windVec: this.windVec,
+      sunDir: this.world.sunDir,
+      cameraPos: this.camera.position,
+      dt: 0.016
+    });
+    this.playerKite.visual.resetTailAt(this.playerKite.position);
+    this.playerKite._updateStringCurve(this.windVec, -1, 0);
+    this.playerKite.visual.setVisible(true);
+    this.playerKite.lineMesh.visible = true;
+
+    this.characterMode = false;
+    document.body.classList.remove('character-mode');
+    document.getElementById('touch-char-controls')?.classList.add('hidden');
+    document.getElementById('hud-bottom')?.classList.remove('hud-hidden');
+    this.touchMove.clear();
+    this.touchSprint = false;
+    this.characterMoveSpeed = 0;
+    this.camModeIdx = this.cameraModes.findIndex((camera) => camera.id === (this.selectedMap === 'laje' ? 'laje' : 'aerea'));
+    document.getElementById('label-camera').textContent = this.cameraModes[this.camModeIdx].label;
+    document.getElementById('label-explore').textContent = 'Explorar';
+    this.sound.playSocada(0.45);
+    this.showBanner('PIPA SOLTA!', runSpeed >= 6
+      ? 'Boa corrida! Agora puxe a linha e dê socadas para ganhar altura.'
+      : 'Lançamento leve. Segure W e dê toques no ESPAÇO para ganhar altura.', 'normal');
   }
 
   _onResize() {
@@ -221,12 +337,25 @@ class Pipa3DGame {
     document.getElementById('btn-weather').addEventListener('click', () => this.cycleWeather());
     document.getElementById('btn-oficina').addEventListener('click', () => this.openOficina());
     document.getElementById('btn-explore').addEventListener('click', () => this.toggleCharacterMode());
-    const openOnline = () => document.getElementById('online-modal').classList.remove('hidden');
+    const openOnline = () => {
+      if (!this.multiplayer.connected) {
+        document.getElementById('online-room-map').value = this.selectedMap;
+        document.getElementById('online-room-difficulty').value = this.matchDifficulty;
+        this._showOnlineSection('home');
+      } else {
+        this._showOnlineSection('lobby');
+      }
+      document.getElementById('online-modal').classList.remove('hidden');
+    };
     document.getElementById('btn-online').addEventListener('click', openOnline);
     document.getElementById('btn-open-online-start').addEventListener('click', openOnline);
     document.getElementById('btn-close-online').addEventListener('click', () => {
       document.getElementById('online-modal').classList.add('hidden');
     });
+    document.getElementById('btn-menu-create-room').addEventListener('click', () => this._showOnlineSection('create'));
+    document.getElementById('btn-menu-join-room').addEventListener('click', () => this._showOnlineSection('join'));
+    document.getElementById('btn-online-back-create').addEventListener('click', () => this._showOnlineSection('home'));
+    document.getElementById('btn-online-back-join').addEventListener('click', () => this._showOnlineSection('home'));
     document.getElementById('btn-create-room').addEventListener('click', () => this._connectOnline(true));
     document.getElementById('btn-join-room').addEventListener('click', () => this._connectOnline(false));
     document.getElementById('btn-copy-room').addEventListener('click', async () => {
@@ -270,6 +399,18 @@ class Pipa3DGame {
       document.getElementById('online-name').value = nickname;
     });
 
+    const difficultySelect = document.getElementById('match-difficulty');
+    const onlineDifficultySelect = document.getElementById('online-room-difficulty');
+    this.matchDifficulty = difficultySelect.value || 'normal';
+    difficultySelect.addEventListener('change', () => {
+      this.matchDifficulty = difficultySelect.value;
+      onlineDifficultySelect.value = this.matchDifficulty;
+    });
+    onlineDifficultySelect.addEventListener('change', () => {
+      this.matchDifficulty = onlineDifficultySelect.value;
+      difficultySelect.value = this.matchDifficulty;
+    });
+
     // Graphics profile adapts render scale and shadows to the device.
     const qualitySelect = document.getElementById('graphics-quality');
     let savedQuality = 'balanced';
@@ -293,7 +434,7 @@ class Pipa3DGame {
     this.carretilha.root.position.copy(this.carretilha.baseWorldPos);
     this.carretilha.root.rotation.set(0, 0, 0);
     this.carretilha.getLineExitWorldPosition(this.playerKite.anchorPos);
-    this.playerKite.spawnInSky(true);
+    this._preparePlayerKiteInHand();
 
     this.rivals.forEach((rival, index) => {
       const spot = result.rivalSpots[index % result.rivalSpots.length];
@@ -315,50 +456,24 @@ class Pipa3DGame {
     document.querySelectorAll('.map-option').forEach((button) => {
       button.classList.toggle('selected', button.dataset.map === this.selectedMap);
     });
-    if (this.started) this.showBanner('NOVO CENÁRIO', `${labels[this.selectedMap]} selecionado. Explore e escolha seu ponto de voo.`, 'normal');
+    if (this.started) {
+      this._enterPreLaunchMode();
+      this.showBanner('NOVO CENÁRIO', `${labels[this.selectedMap]} selecionado. Corra e solte a pipa quando estiver pronto.`, 'normal');
+    }
   }
 
   toggleCharacterMode() {
     if (!this.started) {
       this.startGame();
+      return;
     }
-    this.characterMode = !this.characterMode;
-    document.body.classList.toggle('character-mode', this.characterMode);
-    document.getElementById('touch-char-controls')?.classList.toggle('hidden', !this.characterMode);
-    if (this.characterMode) {
-      this.camModeIdx = this.cameraModes.findIndex((camera) => camera.id === 'personagem');
-      this.world.playerAvatar.visible = true;
-      document.getElementById('label-explore').textContent = 'Empinar';
-      this.showBanner('MODO EXPLORAÇÃO', 'Use W A S D para andar. Pressione E para escolher este local e empinar.', 'normal');
-    } else {
-      document.getElementById('label-explore').textContent = 'Explorar';
-      if (this.selectedMap === 'laje') this.camModeIdx = 0;
-      else this.camModeIdx = 1;
-      this.showBanner('MODO PIPA', 'Você voltou a controlar a pipa. Boa ventania!', 'normal');
+    if (this.playerKiteInHand) {
+      this.showBanner('PIPA NA MÃO', 'Caminhe ou corra e pressione E para soltar a pipa.', 'normal');
+      return;
     }
-    document.getElementById('label-camera').textContent = this.cameraModes[this.camModeIdx].label;
-  }
-
-  _placeKiteAtCharacter() {
-    const avatar = this.world.playerAvatar;
-    const floorY = this.selectedMap === 'laje' ? 9.74 : this.world.getTerrainHeight(avatar.position.x, avatar.position.z);
-    avatar.position.y = floorY;
-    this.carretilha.baseWorldPos.set(avatar.position.x, floorY + 1.12, avatar.position.z);
-    this.carretilha.root.position.copy(this.carretilha.baseWorldPos);
-    this.carretilha.root.rotation.set(0, avatar.rotation.y, 0);
-    this.carretilha.getLineExitWorldPosition(this.playerKite.anchorPos);
-    this.playerKite.spawnInSky(true);
-    this.playerKite.triggerSocada(0.8);
-    this.characterMode = false;
-    document.body.classList.remove('character-mode');
-    document.getElementById('touch-char-controls')?.classList.add('hidden');
-    this.touchMove.clear();
-    this.touchSprint = false;
-    document.getElementById('label-explore').textContent = 'Explorar';
-    this.camModeIdx = this.cameraModes.findIndex((camera) => camera.id === 'personagem');
-    document.getElementById('label-camera').textContent = this.cameraModes[this.camModeIdx].label;
-    this.sound.playSocada(0.9);
-    this.showBanner('LOCAL ESCOLHIDO', 'Pipa lançada deste ponto. Agora é só controlar o voo!', 'normal');
+    this._preparePlayerKiteInHand();
+    this._enterPreLaunchMode();
+    this.showBanner('ESCOLHA O PONTO', 'Agora você está com a pipa na mão. Posicione-se e solte quando quiser.', 'normal');
   }
 
   _updateCharacterMovement(dt) {
@@ -370,10 +485,12 @@ class Pipa3DGame {
     if (this.keys['KeyA'] || this.keys['ArrowLeft'] || this.touchMove.has('left')) direction.x -= 1;
     if (this.keys['KeyD'] || this.keys['ArrowRight'] || this.touchMove.has('right')) direction.x += 1;
     const moving = direction.lengthSq() > 0;
+    this.characterMoveSpeed = 0;
     if (moving) {
       direction.normalize();
-      const speed = (this.keys['ShiftLeft'] || this.keys['ShiftRight'] || this.touchSprint ? 8.2 : 4.8) * dt;
-      avatar.position.addScaledVector(direction, speed);
+      const moveSpeed = this.keys['ShiftLeft'] || this.keys['ShiftRight'] || this.touchSprint ? 8.2 : 4.8;
+      this.characterMoveSpeed = moveSpeed;
+      avatar.position.addScaledVector(direction, moveSpeed * dt);
       if (this.selectedMap === 'laje') {
         avatar.position.x = THREE.MathUtils.clamp(avatar.position.x, -4.6, 4.6);
         avatar.position.z = THREE.MathUtils.clamp(avatar.position.z, 10.7, 19.2);
@@ -401,20 +518,40 @@ class Pipa3DGame {
     if (status) status.textContent = message;
   }
 
+  _showOnlineSection(section = 'home') {
+    const sections = {
+      home: 'online-home',
+      create: 'online-create-panel',
+      join: 'online-join-panel',
+      lobby: 'online-room-created'
+    };
+    for (const [key, id] of Object.entries(sections)) {
+      document.getElementById(id)?.classList.toggle('hidden', key !== section);
+    }
+  }
+
+  _updateOnlineLobby(players = []) {
+    const list = document.getElementById('online-player-list');
+    if (!list) return;
+    const names = players.map((player) => player.name || 'Pipeiro');
+    list.textContent = `${players.length}/12 jogadores na sala: ${names.join(' • ') || 'aguardando pipeiros'}`;
+  }
+
   async _connectOnline(create) {
     const name = document.getElementById('online-name').value.trim() || 'Pipeiro';
     const room = document.getElementById('online-room').value.trim();
     const serverUrl = document.getElementById('online-server').value.trim();
+    const mapId = create ? document.getElementById('online-room-map').value : this.selectedMap;
+    const difficulty = document.getElementById('online-room-difficulty').value || this.matchDifficulty;
     if (!create && !room) {
       this._setOnlineStatus('Digite o código da sala que seu amigo enviou.');
       return;
     }
     document.getElementById('btn-create-room').disabled = true;
     document.getElementById('btn-join-room').disabled = true;
+    this._setOnlineStatus(create ? 'Criando sua sala privada…' : 'Procurando a sala…');
     try {
-      await this.multiplayer.connect({
-        name, room, create, serverUrl, mapId: this.selectedMap
-      });
+      await this.multiplayer.connect({ name, room, create, serverUrl, mapId, difficulty });
     } catch (error) {
       this._setOnlineStatus(error.message || 'Falha ao conectar.');
     } finally {
@@ -427,14 +564,20 @@ class Pipa3DGame {
     if (message.type === 'joined') {
       this.onlineRoomCode = message.roomCode;
       document.getElementById('online-room-code').textContent = message.roomCode;
-      document.getElementById('online-room-created').classList.remove('hidden');
       document.getElementById('online-room').value = message.roomCode;
+      this.matchDifficulty = message.difficulty || this.matchDifficulty;
+      document.getElementById('match-difficulty').value = this.matchDifficulty;
+      document.getElementById('online-room-difficulty').value = this.matchDifficulty;
+      const mapNames = { laje: 'Laje do Bairro', praia: 'Praia', parque: 'Parque', campinho: 'Campinho', morro: 'Mirante do Morro' };
+      const difficultyNames = { easy: 'Fácil', normal: 'Normal', hard: 'Difícil' };
+      document.getElementById('online-room-meta').textContent = `${mapNames[message.mapId] || 'Laje do Bairro'} • ${difficultyNames[this.matchDifficulty] || 'Normal'} • até ${message.maxPlayers || 12} jogadores`;
       this._applyMapSelection(message.mapId || this.selectedMap);
       this.setGameMode('online');
       this.startGame();
-      document.getElementById('online-modal').classList.add('hidden');
+      this._showOnlineSection('lobby');
+      document.getElementById('online-modal').classList.remove('hidden');
       this._syncRemoteRoster(message.players || []);
-      this._setOnlineStatus(`Conectado! Compartilhe o código ${message.roomCode} com seus amigos.`);
+      this._setOnlineStatus(`Sala ${message.roomCode} conectada. Copie o código e convide seus amigos.`);
     } else if (message.type === 'roster') {
       this._syncRemoteRoster(message.players || []);
     } else if (message.type === 'player-state') {
@@ -445,6 +588,7 @@ class Pipa3DGame {
       this._handleOnlineReloResult(message);
     } else if (message.type === 'disconnected') {
       for (const id of [...this.remotePlayers.keys()]) this._removeRemotePlayer(id);
+      this._showOnlineSection('home');
     }
   }
 
@@ -455,6 +599,8 @@ class Pipa3DGame {
 
     if (message.loserId === localId) {
       this.playerKite.active = false;
+      this.playerLaunched = false;
+      this.playerKiteInHand = false;
       this.playerKite.visual.setVisible(false);
       this.playerKite.lineMesh.visible = false;
       this.playerKite.lineIntegrity = 0;
@@ -486,6 +632,7 @@ class Pipa3DGame {
   }
 
   _syncRemoteRoster(players) {
+    this._updateOnlineLobby(players);
     const keep = new Set(players.filter((player) => player.id !== this.multiplayer.playerId).map((player) => player.id));
     for (const id of [...this.remotePlayers.keys()]) if (!keep.has(id)) this._removeRemotePlayer(id);
     for (const player of players) if (player.id !== this.multiplayer.playerId) this._upsertRemotePlayer(player);
@@ -756,6 +903,7 @@ class Pipa3DGame {
   }
 
   _getActiveRivals() {
+    if (this.gameMode === 'online') return [];
     return this.gameMode === 'duelo' ? this.rivals.slice(0, 1) : this.rivals;
   }
 
@@ -805,7 +953,14 @@ class Pipa3DGame {
   setGameMode(mode) {
     const previousMode = this.gameMode;
     this.gameMode = mode;
-    if (mode === 'duelo') {
+    if (mode === 'online') {
+      this.rivals.forEach((rival) => {
+        rival.kite.active = false;
+        rival.kite.visual.setVisible(false);
+        rival.kite.lineMesh.visible = false;
+        rival.ai.respawnTimer = 1e9;
+      });
+    } else if (mode === 'duelo') {
       this.rivals.forEach((rival, index) => {
         if (index === 0) {
           if (!rival.kite.active) rival.kite.spawnInSky(true);
@@ -817,7 +972,7 @@ class Pipa3DGame {
           rival.ai.respawnTimer = 1e9;
         }
       });
-    } else if (previousMode === 'duelo') {
+    } else if (previousMode === 'duelo' || previousMode === 'online') {
       this.rivals.forEach((rival) => {
         if (!rival.kite.active) rival.kite.spawnInSky(true);
         rival.ai.respawnTimer = 0;
@@ -850,14 +1005,10 @@ class Pipa3DGame {
     this.started = true;
     document.getElementById('welcome-modal').classList.add('hidden');
     document.getElementById('hud-top').classList.remove('hud-hidden');
-    document.getElementById('hud-bottom').classList.remove('hud-hidden');
     document.getElementById('controls-guide').classList.remove('hud-hidden');
-
-    if (!this.playerKite.active) {
-      this.relaunchPlayerKite();
-    } else {
-      this.triggerPlayerSocada(0.85);
-    }
+    if (!this.playerKiteInHand) this._preparePlayerKiteInHand();
+    this._enterPreLaunchMode();
+    this.showBanner('PIPA NA MÃO', 'Caminhe ou corra pela laje e pressione E para soltar a pipa.', 'normal');
   }
 
   cycleCamera() {
@@ -882,10 +1033,7 @@ class Pipa3DGame {
   }
 
   triggerPlayerSocada(strength = 1.0) {
-    if (!this.playerKite.active) {
-      this.relaunchPlayerKite();
-      return;
-    }
+    if (!this.playerKite.active || this.playerKiteInHand) return false;
     this.playerKite.triggerSocada(strength);
     this.carretilha.triggerSocada(strength);
     this.sound.playSocada(strength);
@@ -895,9 +1043,9 @@ class Pipa3DGame {
   relaunchPlayerKite() {
     document.getElementById('relaunch-overlay').classList.add('hidden');
     this.lastCutTargetPos = null;
-    this.playerKite.spawnInSky(true); // Launches low right above your laje so you climb it up!
-    this.triggerPlayerSocada(1.0);
-    this.showBanner('NA MÃO!', 'Nova pipa subindo da laje — Soca e dá linha!', 'normal');
+    this._preparePlayerKiteInHand();
+    this._enterPreLaunchMode();
+    this.showBanner('NOVA PIPA NA MÃO', 'Escolha onde ficar, corra e pressione E para soltá-la.', 'normal');
   }
 
   _flashDeckBtn(id) {
@@ -949,7 +1097,7 @@ class Pipa3DGame {
         } else if (code === 'KeyV') {
           this.toggleCharacterMode();
         } else if (code === 'KeyE' && this.characterMode) {
-          this._placeKiteAtCharacter();
+          this._launchPlayerKite();
         } else if (code === 'KeyO') {
           const modal = document.getElementById('oficina-modal');
           if (modal.classList.contains('hidden')) this.openOficina();
@@ -1104,7 +1252,7 @@ class Pipa3DGame {
       });
     }
     document.getElementById('touch-launch')?.addEventListener('click', () => {
-      if (this.characterMode) this._placeKiteAtCharacter();
+      if (this.characterMode) this._launchPlayerKite();
     });
   }
 
@@ -1523,6 +1671,8 @@ class Pipa3DGame {
 
     if (loser.isPlayer) {
       // Player was cut!
+      this.playerLaunched = false;
+      this.playerKiteInHand = false;
       loser.active = false;
       loser.visual.setVisible(false);
       loser.lineMesh.visible = false;
@@ -1740,6 +1890,7 @@ class Pipa3DGame {
     // 1. Update wind, scene and character exploration.
     this._updateWind(elapsed);
     this._updateCharacterMovement(dt);
+    this._updateHeldPlayerKite(dt);
     const camModeId = this.cameraModes[this.camModeIdx].id;
     this.world.update(this.windVec, elapsed, dt, camModeId !== 'laje' || this.characterMode);
 
@@ -1776,8 +1927,10 @@ class Pipa3DGame {
     const combatInfo = this._processCombatAndCollisions(dt);
 
     // 4. Update Player Kite Physics
-    const playerGroundY =
-      this.world.getTerrainHeight(this.playerKite.position.x, this.playerKite.position.z) + 4.5;
+    const playerGroundY = Math.max(
+      this.world.getTerrainHeight(this.playerKite.position.x, this.playerKite.position.z) + 1.4,
+      this.playerKite.anchorPos.y + 0.25
+    );
 
     this.playerKite.update({
       controls: playerControls,
@@ -1791,7 +1944,11 @@ class Pipa3DGame {
     });
 
     // 5. Update Rival AI Kites
-    const difficulty = this.gameMode === 'torneio' ? 0.9 + this.tournamentWave * 0.16 : 1.0;
+    const difficulty = getAIDifficulty({
+      matchDifficulty: this.matchDifficulty,
+      gameMode: this.gameMode,
+      tournamentWave: this.tournamentWave
+    });
     for (const r of this._getActiveRivals()) {
       const aiControls = r.ai.update({
         playerKite: this.playerKite,
@@ -1871,3 +2028,6 @@ const _camDesiredPos = new THREE.Vector3();
 const _camDir = new THREE.Vector3();
 const _upOffset = new THREE.Vector3();
 const _lookAhead = new THREE.Vector3();
+const _heldKiteLocal = new THREE.Vector3(0.48, 1.54, -0.62);
+const _heldKiteEuler = new THREE.Euler();
+const _launchForward = new THREE.Vector3();
