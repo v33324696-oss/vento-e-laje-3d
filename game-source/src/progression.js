@@ -19,6 +19,7 @@ function createDefaultProfile() {
     level: 1,
     xp: 0,
     coins: 250,
+    ownedLines: [],
     stats: { cuts: 0, catches: 0, tailCuts: 0, bestCombo: 1, games: 0 },
     missions: MISSION_TEMPLATES.map((mission) => ({ id: mission.id, progress: 0, claimed: false }))
   };
@@ -36,6 +37,7 @@ function normalizeProfile(value) {
     level: Math.max(1, n(value.level, 1, 999)),
     xp: n(value.xp, 0),
     coins: n(value.coins, 250),
+    ownedLines: Array.isArray(value.ownedLines) ? value.ownedLines.filter((id) => id === 'linha_descarga') : [],
     stats: {
       cuts: n(value.stats?.cuts, 0),
       catches: n(value.stats?.catches, 0),
@@ -133,6 +135,22 @@ export class ProgressionStore {
     }
     this.save();
     return { xpEarned, coinsEarned, levelsGained, completedMissions };
+  }
+
+  ownsLine(id) {
+    return id !== 'linha_descarga' || this.profile.ownedLines.includes(id);
+  }
+
+  buyLine(id) {
+    if (this.ownsLine(id)) return { ok: true, alreadyOwned: true };
+    if (id !== 'linha_descarga') return { ok: false, reason: 'Item indisponível.' };
+    if (this.profile.level < 4) return { ok: false, reason: 'Desbloqueia no nível 4.' };
+    const price = 900;
+    if (this.profile.coins < price) return { ok: false, reason: `Faltam ${price - this.profile.coins} moedas.` };
+    this.profile.coins -= price;
+    this.profile.ownedLines.push(id);
+    this.save();
+    return { ok: true, price };
   }
 
   getMissions() {
