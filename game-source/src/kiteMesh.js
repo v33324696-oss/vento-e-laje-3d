@@ -232,9 +232,10 @@ export class KiteVisual {
     }
 
     const baseCount = this.spec.tailSegments;
+    const noTail = this.tailStyle === 'sem';
     const styleMult = this.tailStyle === 'longa' ? 1.35 : this.tailStyle === 'curta' ? 0.55 : 1.0;
-    this.maxTailNodes = Math.max(2, Math.round(baseCount * styleMult));
-    this.activeTailNodes = this.maxTailNodes;
+    this.maxTailNodes = noTail ? 2 : Math.max(2, Math.round(baseCount * styleMult));
+    this.activeTailNodes = noTail ? 0 : this.maxTailNodes;
     this.segLength = 0.25 * this.spec.scale;
 
     this.tailNodes = [];
@@ -276,6 +277,8 @@ export class KiteVisual {
       this.ribbonInstanced.instanceColor.needsUpdate = true;
     }
     this.scene.add(this.ribbonInstanced);
+    this.tailLine.visible = !noTail;
+    this.ribbonInstanced.visible = !noTail;
   }
 
   rebuild({ modelId, patternId, tailStyle }) {
@@ -293,7 +296,7 @@ export class KiteVisual {
       this.tailNodes[i].set(worldPos.x, worldPos.y - 0.8 - i * this.segLength, worldPos.z);
       this.tailPrev[i].copy(this.tailNodes[i]);
     }
-    this.activeTailNodes = this.maxTailNodes;
+    this.activeTailNodes = this.tailStyle === 'sem' ? 0 : this.maxTailNodes;
     this.tailLine.geometry.setDrawRange(0, this.activeTailNodes);
   }
 
@@ -312,7 +315,7 @@ export class KiteVisual {
   }
 
   getTailRatio() {
-    return this.activeTailNodes / Math.max(1, this.maxTailNodes);
+    return this.tailStyle === 'sem' ? 0 : this.activeTailNodes / Math.max(1, this.maxTailNodes);
   }
 
   getBridleWorldPosition(outVec) {
@@ -489,8 +492,9 @@ export class KiteVisual {
 
   setVisible(vis) {
     this.group.visible = vis;
-    this.tailLine.visible = vis;
-    this.ribbonInstanced.visible = vis;
+    const hasTail = this.tailStyle !== 'sem' && this.activeTailNodes > 1;
+    this.tailLine.visible = vis && hasTail;
+    this.ribbonInstanced.visible = vis && hasTail;
   }
 
   dispose() {
