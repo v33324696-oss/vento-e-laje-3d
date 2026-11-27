@@ -6,6 +6,7 @@ import { KiteVisual } from './kiteMesh.js';
 import { LINE_TYPES } from './carretilha.js';
 import { evaluateReloScore } from './relo.js';
 import { calculateAerodynamicForces, getKiteAeroProfile, getWindPhase, sampleWindAt } from './kiteAerodynamics.js';
+import { calculateCableResponse, calculateStructuralResponse } from './kiteStructure.js';
 
 export const STRING_SEGMENTS = 28;
 
@@ -123,9 +124,12 @@ export class KiteEntity {
 
     // Build 3D Catenary String (Line2 for crisp anti-aliased thickness)
     this.stringNodes = [];
+    this.stringPrevNodes = [];
     for (let i = 0; i <= STRING_SEGMENTS; i++) {
       this.stringNodes.push(new THREE.Vector3());
+      this.stringPrevNodes.push(new THREE.Vector3());
     }
+    this.stringRopeReady = false;
     this.stringFlatPos = new Float32Array((STRING_SEGMENTS + 1) * 3);
     this.stringColors = new Float32Array((STRING_SEGMENTS + 1) * 3);
 
@@ -173,6 +177,7 @@ export class KiteEntity {
     this.angleOfAttack = 0.26;
     this.bankAngle = 0;
     this.stalled = false;
+    this.stringRopeReady = false;
     this.velocity.set(0, 0, 0);
 
     this.lineLength = lowLaunch ? 24 : (this.isPlayer ? 58 : 54 + Math.random() * 22);
@@ -268,41 +273,88 @@ export class KiteEntity {
     void windVec;
   }
 
-  _updateStringCurve(windVec, highlightU = -1, highlightStrength = 0) {
+  _updateStringCurve(windVec, highlightU = -1, highlightStrength = 0, dt = 0.016) {
     const bridlePos = this.visual.getBridleWorldPosition(_bridleWorld);
     const span = this.anchorPos.distanceTo(bridlePos);
+    const ropeLength = Math.max(span, this.lineLength);
+    const segmentLength = ropeLength / STRING_SEGMENTS;
+    const stepDt = Math.min(0.033, Math.max(0.001, dt));
+    const dt2 = stepDt * stepDt;
 
-    // Catenary sag ("barriga da linha") shrinks when taut, grows when slack or long
-    const slackFactor = Math.max(0.03, 1.04 - this.tension * 0.92);
-    const lengthFactor = span / 65;
-    const gravitySag = slackFactor * lengthFactor * 3.4 * this.lineType.drag;
-    const windBow = slackFactor * lengthFactor * 2.1 * this.lineType.drag;
+    // Initialize a catenary-shaped rope when the kite launches or is reset.
+    if (!this.stringRopeReady) {
+      const slack = Math.max(0, ropeLength - span);
+      const initialSag = Math.min(7.5, Math.sqrt(Math.max(0, ropeLength * ropeLength - span * span)) * 0.22);
+      for (let i = 0; i <= STRING_SEGMENTS; i++) {
+        const u = i / STRING_SEGMENTS;
+        const parabola = 4 * u * (1 - u);
+        const node = this.stringNodes[i];
+        node.lerpVectors(this.anchorPos, bridlePos, u);
+        node.y -= initialSag * parabola;
+        this.stringPrevNodes[i].copy(node);
+      }
+      this.stringRopeReady = true;
+      void slack;
+    }
 
-    _windNorm.copy(windVec).normalize();
+    this.stringNodes[0].copy(this.anchorPos);
+    this.stringNodes[STRING_SEGMENTS].copy(bridlePos);
+    this.stringPrevNodes[0].copy(this.anchorPos);
+    this.stringPrevNodes[STRING_SEGMENTS].copy(bridlePos);
+
+    // Verlet integration for a flexible line with gravity, wind loading and a
+    // little high-frequency vibration during socadas / line-to-line contact.
+    const lineDamping = THREE.MathUtils.clamp(0.984 - this.lineType.elasticity * 0.28, 0.955, 0.985);
+    const windLoad = 0.13 * this.lineType.drag;
+    for (let i = 1; i < STRING_SEGMENTS; i++) {
+      const node = this.stringNodes[i];
+      const previous = this.stringPrevNodes[i];
+      _ropeVelocity.subVectors(node, previous).multiplyScalar(lineDamping);
+      previous.copy(node);
+      node.add(_ropeVelocity);
+      node.y -= 9.8 * dt2 * 0.16;
+      node.addScaledVector(windVec, windLoad * dt2);
+      const u = i / STRING_SEGMENTS;
+      const envelope = Math.sin(u * Math.PI);
+      const whip = Math.sin(performance.now() * 0.012 - i * 0.62)
+        * (this.socadaBoost * 0.018 + highlightStrength * 0.012);
+      node.x += whip * envelope;
+    }
+
+    // Distance constraints preserve the deployed line length while allowing
+    // slack to hang naturally; both endpoints stay attached to the pipeiro/kite.
+    for (let pass = 0; pass < 5; pass++) {
+      this.stringNodes[0].copy(this.anchorPos);
+      this.stringNodes[STRING_SEGMENTS].copy(bridlePos);
+      for (let i = 0; i < STRING_SEGMENTS; i++) {
+        const a = this.stringNodes[i];
+        const b = this.stringNodes[i + 1];
+        _ropeDelta.subVectors(b, a);
+        const distance = _ropeDelta.length() || 0.0001;
+        const correction = (distance - segmentLength) / distance;
+        if (i === 0) {
+          b.addScaledVector(_ropeDelta, -correction);
+        } else if (i === STRING_SEGMENTS - 1) {
+          a.addScaledVector(_ropeDelta, correction);
+        } else {
+          a.addScaledVector(_ropeDelta, correction * 0.5);
+          b.addScaledVector(_ropeDelta, -correction * 0.5);
+        }
+      }
+    }
+
+    this.stringNodes[0].copy(this.anchorPos);
+    this.stringNodes[STRING_SEGMENTS].copy(bridlePos);
     const baseColor = _baseCol.setHex(this.lineType.color);
     const hotColor = _hotCol.setHex(0xffffff);
 
     for (let i = 0; i <= STRING_SEGMENTS; i++) {
       const u = i / STRING_SEGMENTS;
-      const parabola = 4 * u * (1 - u);
-
       const node = this.stringNodes[i];
-      node.lerpVectors(this.anchorPos, bridlePos, u);
-      node.y -= parabola * gravitySag;
-      node.addScaledVector(_windNorm, parabola * windBow);
-
-      // Subtle string whip vibration during socada or relo
-      if (this.socadaBoost > 0.1 || highlightStrength > 0.1) {
-        const vib = Math.sin(u * Math.PI * 3 + performance.now() * 0.045) *
-          (this.socadaBoost * 0.12 + highlightStrength * 0.09) * parabola;
-        node.x += vib;
-      }
-
       this.stringFlatPos[i * 3] = node.x;
       this.stringFlatPos[i * 3 + 1] = node.y;
       this.stringFlatPos[i * 3 + 2] = node.z;
 
-      // Highlight glowing friction zone along string when close to / in relo
       let glow = 0;
       if (highlightU >= 0 && highlightStrength > 0) {
         const distU = Math.abs(u - highlightU);
@@ -463,17 +515,13 @@ export class KiteEntity {
       const extension = currDist - this.lineLength;
       _rad.divideScalar(currDist);
       const radialVelocity = this.velocity.dot(_rad);
-      cableTensionTarget = THREE.MathUtils.clamp(
-        extension * 0.72 + Math.max(0, radialVelocity) * 0.075,
-        0.25,
-        1
-      );
-      this.position.addScaledVector(_rad, -extension);
-
-      // The line removes outward velocity when taut, while paying out lets it
-      // move outward at the actual reel speed.
-      if (radialVelocity > Math.max(0, this.reelSpeed)) {
-        this.velocity.addScaledVector(_rad, -(radialVelocity - Math.max(0, this.reelSpeed)));
+      const cable = calculateCableResponse(extension, radialVelocity, this.lineType);
+      cableTensionTarget = cable.tension;
+      if (cable.positionCorrection > 0) {
+        this.position.addScaledVector(_rad, -Math.min(extension, cable.positionCorrection));
+      }
+      if (radialVelocity > Math.max(0, this.reelSpeed) || extension > 0) {
+        this.velocity.addScaledVector(_rad, -cable.radialImpulse);
       }
     }
 
@@ -492,6 +540,7 @@ export class KiteEntity {
     // 5. Update 3D Kite Visual, Rabiola & Catenary String
     this._updateOrientation(this.localWind);
     const aeroLoad = Math.min(1.2, 0.16 + Math.min(0.68, this.aeroDynamicPressure * 0.007) + this.tension * 0.28 + this.socadaBoost * 0.4 - (this.stalled ? 0.10 : 0));
+    const structural = calculateStructuralResponse(this.aeroDynamicPressure, spec.id);
 
     this.visual.update({
       position: this.position,
@@ -500,10 +549,13 @@ export class KiteEntity {
       windVec: this.localWind,
       sunDir,
       cameraPos,
+      structuralLoad: structural.strain,
+      angleOfAttack: this.angleOfAttack,
+      stalled: this.stalled,
       dt: stepDt
     });
 
-    this._updateStringCurve(this.localWind, reloHighlightU, reloHighlightStrength);
+    this._updateStringCurve(this.localWind, reloHighlightU, reloHighlightStrength, stepDt);
   }
 
   dispose() {
@@ -1020,6 +1072,9 @@ const _baseCol = new THREE.Color();
 const _hotCol = new THREE.Color();
 const _vertCol = new THREE.Color();
 const _DesiredVel = new THREE.Vector3();
+const _airRelative = new THREE.Vector3();
+const _ropeVelocity = new THREE.Vector3();
+const _ropeDelta = new THREE.Vector3();
 const _d1 = new THREE.Vector3();
 const _d2 = new THREE.Vector3();
 const _r = new THREE.Vector3();
