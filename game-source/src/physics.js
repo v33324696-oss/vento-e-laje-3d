@@ -177,6 +177,10 @@ export class KiteEntity {
     this.disqueBoost = 0;
     this.disbicarBoost = 0;
     this.disbicarCooldown = 0;
+    this.turnCooldown = 0;
+    this.directionTarget = 0;
+    this.retaoBoost = 0;
+    this.retaoCooldown = 0;
     this.reloContactTime = 0;
     this.noseAngle = (Math.random() - 0.5) * 0.35;
     this.angularVel = 0;
@@ -403,9 +407,8 @@ export class KiteEntity {
     const steer = THREE.MathUtils.clamp(controls.steer || 0, -1, 1);
     const rabicoWildness = 1.0 + (1.0 - tailRatio) * 1.15;
 
-    // Steering is a heading target, not an endless angular-speed command.
-    // Manual controls return the nose toward center when released; AI supplies
-    // its own world-relative target so every kite uses the same stable servo.
+    // Steering changes the player's selected flight direction. The target
+    // remains selected after the button is released; AI keeps its own target.
     if (this.isPlayer && Math.abs(steer) > 0.02) {
       this.directionTarget = steer * 1.12;
     }
