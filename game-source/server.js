@@ -155,6 +155,8 @@ function updateRoomRelo(room, dt, now) {
       }
       fight.lastTouch = now;
 
+      const wrapQuality = Math.max(0, Math.min(1, (now - fight.contactSince) / 380));
+
       const scoreA = evaluateReloScore({
         crossingQuality, tension: a.state.tension, reelSpeed: a.state.reelSpeed,
         kiteSpeed: Math.hypot(...a.state.kiteVelocity), relativeSpeed,
