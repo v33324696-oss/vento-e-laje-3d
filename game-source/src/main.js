@@ -367,10 +367,13 @@ class Pipa3DGame {
     this.playerKite.socadaBoost = 0.08 + launchPower * 0.12;
     this.playerKite.disqueBoost = 0;
     this.playerKite.disbicarBoost = 0;
-    this.playerKite.position.addScaledVector(forward, 0.9 + launchPower * 0.35);
-    this.playerKite.position.y += 0.18 + launchPower * 0.3;
-    this.playerKite.velocity.copy(forward).multiplyScalar(1.9 + runSpeed * 0.76 + launchPower * 0.45);
-    this.playerKite.velocity.y += 0.72 + runSpeed * 0.28 + launchPower * 0.55;
+    // Give the kite enough clean line separation at release. A very short
+    // launch left it almost above the reel, where the tether could pin it
+    // against the rooftop before the player had time to build airflow.
+    this.playerKite.position.addScaledVector(forward, 2.2 + launchPower * 0.75);
+    this.playerKite.position.y += 0.42 + launchPower * 0.42;
+    this.playerKite.velocity.copy(forward).multiplyScalar(4.0 + runSpeed * 0.88 + launchPower * 0.75);
+    this.playerKite.velocity.y += 1.25 + runSpeed * 0.32 + launchPower * 0.85;
     this.playerKite.velocity.addScaledVector(this.windVec, 0.16);
     this.playerKite._updateOrientation(this.windVec);
     this.playerKite.visual.update({

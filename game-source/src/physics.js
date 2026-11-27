@@ -7,7 +7,7 @@ import { LINE_TYPES } from './carretilha.js';
 import { evaluateReloScore } from './relo.js';
 import { bankSpanForSteering, getKiteAeroProfile, getWindPhase, sampleWindAt } from './kiteAerodynamics.js';
 import { getKiteMaterialProfile } from './kiteMaterials.js';
-import { stepKiteSteering } from './kiteSteering.js';
+import { calculateHighAngleDrag, stepKiteSteering } from './kiteSteering.js';
 
 export const STRING_SEGMENTS = 28;
 
@@ -437,8 +437,14 @@ export class KiteEntity {
 
     const slack = 1.0 - this.tension;
     _DesiredVel.addScaledVector(flightWind, 0.36 + slack * 0.68);
-    const highAngleDrag = Math.max(0, _rad.y - (0.43 + aeroProfile.stallAngle * 0.06))
-      * 9.5 * material.dragMultiplier;
+    // Do not confuse a steep kite-line angle with aerodynamic stall.
+    // The old _rad.y term applied a huge downward force immediately after
+    // launch because the kite begins close to the pilot.
+    const highAngleDrag = calculateHighAngleDrag(
+      this.noseAngle,
+      aeroProfile.stallAngle,
+      material.dragMultiplier
+    );
     const modelLift = THREE.MathUtils.clamp(
       (1 + (aeroProfile.lift / aeroProfile.mass - 1) * 0.16) * material.liftMultiplier,
       0.90,

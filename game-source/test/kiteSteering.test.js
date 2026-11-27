@@ -40,3 +40,10 @@ test('a short steering pulse never creates a full uncontrolled spin', () => {
   assert.ok(Math.abs(state.noseAngle) < 0.08);
   assert.ok(Math.abs(state.noseAngle) < Math.PI / 2);
 });
+
+test('a steep line directly above the pilot does not create false aerodynamic stall drag', async () => {
+  const { calculateHighAngleDrag } = await import('../src/kiteSteering.js');
+  assert.equal(calculateHighAngleDrag(0.02, 0.48, 1), 0);
+  assert.ok(calculateHighAngleDrag(0.9, 0.48, 1) > 0);
+  assert.ok(calculateHighAngleDrag(0.9, 0.48, 1) < 1.2);
+});

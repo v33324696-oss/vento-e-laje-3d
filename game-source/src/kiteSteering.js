@@ -49,3 +49,12 @@ export function stepKiteSteering({
 
   return { noseAngle, angularVelocity };
 }
+
+/**
+ * The line's direction above the pilot is not an angle-of-attack measurement.
+ * Only the kite's own nose angle should contribute stall drag.
+ */
+export function calculateHighAngleDrag(noseAngle, stallAngle = 0.48, dragMultiplier = 1) {
+  const excessAngle = Math.max(0, Math.abs(Number(noseAngle) || 0) - Math.max(0.1, stallAngle));
+  return clamp(excessAngle * 1.45 * Math.max(0.1, dragMultiplier), 0, 1.2);
+}
