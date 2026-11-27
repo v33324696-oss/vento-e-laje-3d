@@ -112,11 +112,13 @@
   <aside id="controls-guide" class="controls-guide glass-card hud-hidden">
     <div class="guide-title">COMANDOS DO PIPEIRO</div>
     <div class="guide-row"><kbd>Espaço</kbd> / <kbd>Clique</kbd> <span>Socar (Disparo no Bico)</span></div>
-    <div class="guide-row"><kbd>W</kbd> / <kbd>Segurar Clique</kbd> <span>Puxar / Recolher Linha</span></div>
-    <div class="guide-row"><kbd>S</kbd> / <kbd>Botão Dir.</kbd> <span>Dar linha; toque no início do cruzamento para tentar a largada</span></div>
-    <div class="guide-row"><kbd>RELO</kbd> <span>Ângulo e altura da entrada contam; entrar mal deixa sua linha em desvantagem</span></div>
-    <div class="guide-row"><kbd>A</kbd> <kbd>D</kbd> / <kbd>Setas</kbd> <span>Guiar Direção / Looping</span></div>
-    <div class="guide-row"><kbd>Q</kbd> / <kbd>E</kbd> <span>Disque Rápido (Corte)</span></div>
+    <div class="guide-row"><kbd>W</kbd> / <kbd>Segurar Clique</kbd> <span>PUXAR — recolher linha e avançar</span></div>
+    <div class="guide-row"><kbd>S</kbd> / <kbd>Botão Dir.</kbd> <span>DESCARREGAR — soltar linha devagar e girar</span></div>
+    <div class="guide-row"><kbd>R</kbd> <span>DESCARREGAR RÁPIDO — abrir distância</span></div>
+    <div class="guide-row"><kbd>B</kbd> <span>DISBICAR — puxão brusco com movimento</span></div>
+    <div class="guide-row"><kbd>RELO</kbd> <span>Ângulo, altura, parte da linha e timing contam</span></div>
+    <div class="guide-row"><kbd>A</kbd> <kbd>D</kbd> / <kbd>Setas</kbd> <span>Guiar o bico</span></div>
+    <div class="guide-row"><kbd>Q</kbd> / <kbd>E</kbd> <span>Disque lateral</span></div>
     <div class="guide-row"><kbd>C</kbd> <span>Alternar Câmera 3D</span></div>
     <div class="guide-row"><kbd>V</kbd> <span>Entrar / sair do modo personagem</span></div>
     <div class="guide-row"><kbd>W A S D</kbd> <span>Andar pelo mapa no modo personagem</span></div>
@@ -198,11 +200,19 @@
           <span>Disque Dir ⚡</span>
           <kbd>E</kbd>
         </button>
+        <button id="act-release-fast" class="deck-btn secondary-btn quick-release-btn">
+          <span>DESC. RÁPIDO</span>
+          <kbd>R</kbd>
+        </button>
+        <button id="act-disbicar" class="deck-btn secondary-btn disbicar-btn">
+          <span>DISBICAR</span>
+          <kbd>B</kbd>
+        </button>
       </div>
       <div class="main-actions-row">
         <button id="act-release" class="deck-btn release-btn">
           <span class="act-title">DAR LINHA</span>
-          <span class="act-sub">Descarregar / Girar <kbd>S</kbd></span>
+          <span class="act-sub">Soltar suave / Girar <kbd>S</kbd></span>
         </button>
         <button id="act-pull" class="deck-btn pull-btn">
           <span class="act-title">PUXAR</span>
