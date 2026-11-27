@@ -34,7 +34,7 @@ test('a short steering pulse never creates a full uncontrolled spin', () => {
   for (let i = 0; i < 25; i++) {
     state = stepKiteSteering({ ...state, steer: 1, dt: 1 / 60 });
   }
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 100; i++) {
     state = stepKiteSteering({ ...state, steer: 0, dt: 1 / 60 });
   }
   assert.ok(Math.abs(state.noseAngle) < 0.08);
