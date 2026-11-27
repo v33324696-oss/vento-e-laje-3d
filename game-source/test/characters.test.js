@@ -55,10 +55,9 @@ test('preferred street colors do not make the rest of a resident a duplicate', (
 test('humanoid character construction uses rounded anatomical geometry', async () => {
   const { readFileSync } = await import('node:fs');
   const worldSource = readFileSync(new URL('../src/world.js', import.meta.url), 'utf8');
-  const characterBuilder = worldSource.slice(
-    worldSource.indexOf('_createPipeiroCharacter('),
-    worldSource.indexOf('createPipeiroCharacter(', worldSource.indexOf('_createPipeiroCharacter(') + 1)
-  );
+  const builderStart = worldSource.indexOf('  _createPipeiroCharacter(');
+  const builderEnd = worldSource.indexOf('  createPipeiroCharacter(', builderStart + 1);
+  const characterBuilder = worldSource.slice(builderStart, builderEnd);
   assert.match(characterBuilder, /THREE\.LatheGeometry/, 'torso should have a smooth human silhouette');
   assert.match(characterBuilder, /THREE\.CapsuleGeometry/, 'arms and legs should use rounded limb geometry');
   assert.match(characterBuilder, /leftCalf:\s*calves\[0\]/, 'legs should have articulated lower-leg joints');
