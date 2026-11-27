@@ -32,7 +32,11 @@ class Pipa3DGame {
 
     // Game state
     this.started = false;
+    this.paused = false;
     this.worldEvents = new NeighborhoodEventDirector();
+    this.currentFps = 0;
+    this.fpsFrameCount = 0;
+    this.fpsSampleStartedAt = performance.now();
     this.gameMode = 'festival'; // 'festival' | 'torneio' | 'zen'
     this.matchDifficulty = 'normal';
     this.weatherOrder = ['tarde', 'pordosol', 'ventania', 'nublado', 'chuva'];
@@ -485,6 +489,25 @@ class Pipa3DGame {
         this._setOnlineStatus(`Código da sala: ${code}`);
       }
     });
+    document.getElementById('btn-pause')?.addEventListener('click', () => this._togglePause());
+    document.getElementById('btn-resume-game')?.addEventListener('click', () => this._togglePause(false));
+    const chatInput = document.getElementById('online-chat-input');
+    const sendRoomMessage = () => {
+      const message = chatInput?.value.trim();
+      if (!message || !this.multiplayer.sendChat(message)) return;
+      this._appendOnlineChat({ name: this.progression.profile.nickname, text: message });
+      chatInput.value = '';
+    };
+    document.getElementById('btn-online-chat-send')?.addEventListener('click', sendRoomMessage);
+    chatInput?.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') { event.preventDefault(); sendRoomMessage(); }
+    });
+    document.querySelectorAll('[data-online-emote]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const emote = button.dataset.onlineEmote;
+        if (this.multiplayer.sendEmote(emote)) this._appendOnlineChat({ name: this.progression.profile.nickname, text: emote, emote: true });
+      });
+    });
     document.getElementById('btn-mode').addEventListener('click', () => {
       document.getElementById('welcome-modal').classList.remove('hidden');
     });
@@ -666,6 +689,43 @@ class Pipa3DGame {
     this.carretilha.baseWorldPos.set(avatar.position.x, avatar.position.y + 1.12, avatar.position.z);
   }
 
+  _togglePause(force = null) {
+    if (!this.started) return false;
+    this.paused = force === null ? !this.paused : Boolean(force);
+    document.getElementById('pause-overlay')?.classList.toggle('hidden', !this.paused);
+    const buttonLabel = document.querySelector('#btn-pause span:last-child');
+    if (buttonLabel) buttonLabel.textContent = this.paused ? 'Pausado' : 'Pausar';
+    if (this.paused) {
+      this.keys = {};
+      this.uiHold.pull = false;
+      this.uiHold.release = false;
+      this.uiHold.quickRelease = false;
+      this.padSteer = 0;
+      this.touchMove.clear();
+      this.touchSprint = false;
+      this.rabiolaReelHeld = false;
+    } else {
+      this.lastFrameMs = performance.now();
+      this.lastRenderMs = this.lastFrameMs;
+    }
+    return true;
+  }
+
+  _appendOnlineChat({ name = 'Pipeiro', text = '', emote = false } = {}) {
+    const panel = document.getElementById('online-chat-messages');
+    if (!panel || !text) return;
+    const row = document.createElement('div');
+    row.className = emote ? 'online-chat-entry emote' : 'online-chat-entry';
+    const author = document.createElement('strong');
+    author.textContent = String(name).slice(0, 18);
+    const message = document.createElement('span');
+    message.textContent = String(text).slice(0, 140);
+    row.append(author, message);
+    panel.appendChild(row);
+    while (panel.children.length > 28) panel.firstElementChild.remove();
+    panel.scrollTop = panel.scrollHeight;
+  }
+
   _setOnlineStatus(message) {
     const status = document.getElementById('online-status');
     if (status) status.textContent = message;
@@ -686,8 +746,9 @@ class Pipa3DGame {
   _updateOnlineLobby(players = []) {
     const list = document.getElementById('online-player-list');
     if (!list) return;
-    const names = players.map((player) => player.name || 'Pipeiro');
-    list.textContent = `${players.length}/12 jogadores na sala: ${names.join(' • ') || 'aguardando pipeiros'}`;
+    const ranking = [...players].sort((a, b) => (b.state?.cuts || 0) - (a.state?.cuts || 0) || (b.state?.score || 0) - (a.state?.score || 0));
+    const names = ranking.map((player, index) => `${index + 1}. ${player.name || 'Pipeiro'} · ${player.state?.cuts || 0} cortes`);
+    list.textContent = `${players.length}/12 pipeiros · ${names.join('  |  ') || 'aguardando pipeiros'}`;
   }
 
   async _connectOnline(create) {
@@ -739,6 +800,10 @@ class Pipa3DGame {
       this._removeRemotePlayer(message.playerId);
     } else if (message.type === 'relo-result') {
       this._handleOnlineReloResult(message);
+    } else if (message.type === 'chat') {
+      this._appendOnlineChat({ name: message.name, text: message.text });
+    } else if (message.type === 'emote') {
+      this._appendOnlineChat({ name: message.name, text: message.emote, emote: true });
     } else if (message.type === 'disconnected') {
       for (const id of [...this.remotePlayers.keys()]) this._removeRemotePlayer(id);
       this._showOnlineSection('home');
@@ -751,6 +816,8 @@ class Pipa3DGame {
     const loserName = message.loserName || 'Pipeiro';
 
     if (message.loserId === localId) {
+      this.progression.recordRivalry(winnerName, 'loss');
+      this._renderCareerHub();
       this.playerKite.active = false;
       this.playerLaunched = false;
       this.playerKiteInHand = false;
@@ -763,12 +830,18 @@ class Pipa3DGame {
       document.getElementById('relaunch-reason').textContent = `${winnerName} levou sua pipa no ${message.moveName || 'relo'}! Suba outra para voltar à disputa.`;
       document.getElementById('relaunch-overlay').classList.remove('hidden');
     } else if (message.winnerId === localId) {
+      this.progression.recordRivalry(loserName, 'win');
+      this.progression.recordCombat({ opponent: loserName, technique: message.moveName || 'no cruzamento', points: 150 * this.combo, combo: this.combo });
+      this.progression.recordReputation(this.selectedMap, 10);
+      this._renderCareerHub();
       this.cuts++;
       this._recordProgress('cut');
       const pts = 150 * this.combo;
       this.score += pts;
       this.combo = Math.min(8, this.combo + 1);
       this.sound.playCut(true);
+      this.progression.record('cut', 1);
+      this._renderCareerHub();
       this.showBanner('RELO ONLINE!', `Você cortou ${loserName} ${message.moveName || 'no cruzamento'}! +${pts} pts`, 'normal');
     } else {
       const loser = this.remotePlayers.get(message.loserId);
@@ -880,6 +953,8 @@ class Pipa3DGame {
     this.lastNetSendMs = nowMs;
     const avatar = this.world.playerAvatar;
     this.multiplayer.sendState({
+      score: this.score,
+      cuts: this.cuts,
       mapId: this.world.mapId,
       position: avatar.position.toArray(),
       rotation: avatar.rotation.y,
@@ -2536,6 +2611,8 @@ class Pipa3DGame {
     document.getElementById('stat-cuts').textContent = this.cuts;
     document.getElementById('stat-catches').textContent = this.catches;
     document.getElementById('stat-combo').textContent = `x${this.combo}`;
+    const fpsLabel = document.getElementById('performance-fps');
+    if (fpsLabel) fpsLabel.textContent = `${this.currentFps || 60} FPS`;
     const clock = document.getElementById('label-time');
     if (clock) clock.textContent = this.world.getClockLabel();
 
@@ -2903,6 +2980,13 @@ class Pipa3DGame {
     // physics bug diagnosable without turning the entire play area into a blank screen.
     this._recordReplayFrame(dt);
     this.renderer.render(this.scene, this.camera);
+    this.fpsFrameCount += 1;
+    const fpsElapsed = nowMs - this.fpsSampleStartedAt;
+    if (fpsElapsed >= 1000) {
+      this.currentFps = Math.round(this.fpsFrameCount * 1000 / fpsElapsed);
+      this.fpsFrameCount = 0;
+      this.fpsSampleStartedAt = nowMs;
+    }
   }
 }
 

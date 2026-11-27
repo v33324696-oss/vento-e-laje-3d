@@ -65,6 +65,7 @@
 
     <!-- Top Right Utility Controls -->
     <div class="utility-bar">
+      <button id="btn-pause" class="hud-btn glass-card" title="Pausar ou retomar a partida"><span class="btn-icon">⏸️</span><span>Pausar</span></button>
       <button id="btn-camera" class="hud-btn glass-card" title="Alternar Câmera (Tecla C)">
         <span class="btn-icon">🎥</span>
         <span id="label-camera">Câm: Laje</span>
@@ -556,9 +557,31 @@
           </div>
           <p id="online-room-meta" class="online-panel-hint">Laje do Bairro • Normal • até 12 jogadores</p>
           <div id="online-player-list" class="online-player-list">1/12 jogadores na sala</div>
+          <section class="online-chat-panel" aria-label="Chat da sala">
+            <div class="online-panel-title">CHAT DA PARTIDA</div>
+            <div id="online-chat-messages" class="online-chat-messages" aria-live="polite"></div>
+            <div class="online-emote-row" aria-label="Emotes rápidos">
+              <button type="button" data-online-emote="👋" aria-label="Olá">👋</button>
+              <button type="button" data-online-emote="🔥" aria-label="Fogo">🔥</button>
+              <button type="button" data-online-emote="🪁" aria-label="Pipa">🪁</button>
+              <button type="button" data-online-emote="✂️" aria-label="Corte">✂️</button>
+              <button type="button" data-online-emote="🏆" aria-label="Troféu">🏆</button>
+              <button type="button" data-online-emote="😂" aria-label="Risada">😂</button>
+            </div>
+            <div class="online-chat-compose"><input id="online-chat-input" maxlength="140" placeholder="Mensagem para a sala…" autocomplete="off"/><button id="btn-online-chat-send" type="button" class="secondary-cta">ENVIAR</button></div>
+          </section>
           <p class="online-panel-hint">Envie o código para seus amigos. Feche este menu para voltar à partida.</p>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div id="pause-overlay" class="pause-overlay hidden">
+    <div class="pause-card glass-card">
+      <span class="pause-eyebrow">VENTO &amp; LAJE 3D</span>
+      <h2>PARTIDA PAUSADA</h2>
+      <p>Seu voo está em segurança. Retome quando estiver pronto.</p>
+      <button id="btn-resume-game" type="button" class="primary-cta">▶ CONTINUAR JOGANDO</button>
     </div>
   </div>
 

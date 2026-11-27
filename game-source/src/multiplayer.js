@@ -86,6 +86,22 @@ export class MultiplayerClient {
     this.socket.send(JSON.stringify({ type: 'state', state }));
   }
 
+  sendChat(text) {
+    if (!this.connected || !this.socket || this.socket.readyState !== WebSocket.OPEN) return false;
+    const message = String(text || '').trim().slice(0, 140);
+    if (!message) return false;
+    this.socket.send(JSON.stringify({ type: 'chat', text: message }));
+    return true;
+  }
+
+  sendEmote(emote) {
+    if (!this.connected || !this.socket || this.socket.readyState !== WebSocket.OPEN) return false;
+    const value = String(emote || '').slice(0, 8);
+    if (!value) return false;
+    this.socket.send(JSON.stringify({ type: 'emote', emote: value }));
+    return true;
+  }
+
   disconnect(updateStatus = true) {
     if (this.socket) {
       this.socket.close();

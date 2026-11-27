@@ -56,6 +56,8 @@ const safeState = (state = {}) => {
     modelId: typeof state.modelId === 'string' ? state.modelId.slice(0, 24) : 'murcha',
     patternId: typeof state.patternId === 'string' ? state.patternId.slice(0, 32) : 'estrela_paulista',
     lineTypeId: typeof state.lineTypeId === 'string' ? state.lineTypeId.slice(0, 32) : 'branca_pura',
+    score: Number.isFinite(Number(state.score)) ? Math.max(0, Math.min(100000000, Math.floor(Number(state.score)))) : 0,
+    cuts: Number.isFinite(Number(state.cuts)) ? Math.max(0, Math.min(100000, Math.floor(Number(state.cuts)))) : 0,
     active: state.active !== false
   };
 };
@@ -341,7 +343,8 @@ wss.on('connection', (socket) => {
         id: randomUUID(),
         name: String(message.name || 'Pipeiro').replace(/[<>\u0000-\u001f]/g, '').trim().slice(0, 18) || 'Pipeiro',
         socket,
-        state: safeState({ mapId: room.mapId })
+        state: safeState({ mapId: room.mapId }),
+        lastChatAt: 0
       };
       room.players.set(currentPlayer.id, currentPlayer);
       send(socket, {
@@ -363,6 +366,32 @@ wss.on('connection', (socket) => {
       broadcast(currentRoom, {
         type: 'player-state',
         player: { id: currentPlayer.id, name: currentPlayer.name, state: currentPlayer.state }
+      }, currentPlayer.id);
+      return;
+    }
+
+    if ((message.type === 'chat' || message.type === 'emote') && currentRoom && currentPlayer) {
+      const now = Date.now();
+      if (now - currentPlayer.lastChatAt < 750) return;
+      if (message.type === 'chat') {
+        const text = String(message.text || '')
+          .replace(/[<>\u0000-\u001f]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 140);
+        if (!text) return;
+        currentPlayer.lastChatAt = now;
+        broadcast(currentRoom, {
+          type: 'chat', playerId: currentPlayer.id, name: currentPlayer.name, text, sentAt: now
+        }, currentPlayer.id);
+        return;
+      }
+      const allowedEmotes = ['👋', '🔥', '🪁', '✂️', '🏆', '😂', '💨'];
+      const emote = allowedEmotes.includes(message.emote) ? message.emote : null;
+      if (!emote) return;
+      currentPlayer.lastChatAt = now;
+      broadcast(currentRoom, {
+        type: 'emote', playerId: currentPlayer.id, name: currentPlayer.name, emote, sentAt: now
       }, currentPlayer.id);
     }
   });
