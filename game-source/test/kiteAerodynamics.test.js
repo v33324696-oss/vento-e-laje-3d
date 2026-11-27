@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   KITE_MODEL_IDS,
   KITE_AERO_PROFILES,
+  bankSpanForSteering,
   calculateAerodynamicForces,
   calculateLiftCoefficient,
   getKiteAeroProfile,
@@ -105,4 +106,37 @@ test('excessive angle of attack causes stall and reduces lift', () => {
 test('kite models have different stall thresholds', () => {
   assert.notEqual(KITE_AERO_PROFILES.raia.stallAngle, KITE_AERO_PROFILES.rokkaku.stallAngle);
   assert.notEqual(KITE_AERO_PROFILES.delta.stallAngle, KITE_AERO_PROFILES.capucheta.stallAngle);
+});
+
+test('steering bank redirects aerodynamic lift toward the commanded side', () => {
+  const span = { x: 1, y: 0, z: 0 };
+  const flow = { x: 0, y: 0.4, z: -9 };
+  const forward = { x: 0, y: 1, z: 0 };
+  const neutralSpan = bankSpanForSteering(span, flow, 0, {});
+  const rightSpan = bankSpanForSteering(span, flow, 0.58, {});
+  const leftSpan = bankSpanForSteering(span, flow, -0.58, {});
+  const neutral = calculateAerodynamicForces({
+    airVelocity: flow, spanDirection: neutralSpan, forwardDirection: forward, angleOfAttack: 0.28
+  });
+  const right = calculateAerodynamicForces({
+    airVelocity: flow, spanDirection: rightSpan, forwardDirection: forward, angleOfAttack: 0.28
+  });
+  const left = calculateAerodynamicForces({
+    airVelocity: flow, spanDirection: leftSpan, forwardDirection: forward, angleOfAttack: 0.28
+  });
+  assert.ok(Math.abs(neutral.fx) < 0.02);
+  assert.ok(right.fx > 0.1);
+  assert.ok(left.fx < -0.1);
+  assert.ok(right.fy > 0 && left.fy > 0);
+});
+
+test('banked span stays normalized during strong steering input', () => {
+  const banked = bankSpanForSteering(
+    { x: 1, y: 0, z: 0 },
+    { x: 0.4, y: 0.2, z: -8 },
+    2.0,
+    {}
+  );
+  const length = Math.hypot(banked.x, banked.y, banked.z);
+  assert.ok(Math.abs(length - 1) < 1e-9);
 });
