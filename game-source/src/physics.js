@@ -114,9 +114,8 @@ export class KiteEntity {
     this.disbicarBoost = 0;
     this.disbicarDir = 1;
     this.disbicarCooldown = 0;
-    this.spinTimer = 0;
-    this.spinDirection = 1;
-    this.spinCooldown = 0;
+    this.turnCooldown = 0;
+    this.directionTarget = 0;
     this.retaoBoost = 0;
     this.retaoHeading = 0;
     this.retaoCooldown = 0;
@@ -233,21 +232,23 @@ export class KiteEntity {
     this.tension = 1.0;
   }
 
-  triggerSpin(dir = 1) {
-    if (!this.active || this.spinCooldown > 0 || this.retaoBoost > 0.05) return false;
-    this.spinDirection = Math.sign(dir) || 1;
-    this.spinTimer = 0.72;
-    this.spinCooldown = 1.15;
-    this.angularVel = this.spinDirection * 5.8;
+  triggerTurn(dir = 1) {
+    if (!this.active || this.turnCooldown > 0 || this.retaoBoost > 0.05) return false;
+    // Select a flight heading to the chosen side. This is a controlled turn,
+    // not a continuous 360-degree spin of the kite.
+    this.directionTarget = (Math.sign(dir) || 1) * 1.12;
+    this.turnCooldown = 0.32;
     return true;
   }
 
   triggerRetao() {
-    if (!this.active || this.retaoCooldown > 0 || this.spinTimer > 0.05) return false;
-    this.retaoHeading = this.noseAngle;
-    this.retaoBoost = 0.62;
-    this.retaoCooldown = 1.25;
-    this.angularVel *= 0.12;
+    if (!this.active || this.retaoCooldown > 0 || this.retaoBoost > 0.05) return false;
+    // Retão is a short, straight dive toward the flyer, not a forward sprint.
+    this.retaoHeading = Math.PI;
+    this.directionTarget = 0;
+    this.retaoBoost = 0.95;
+    this.retaoCooldown = 1.35;
+    this.angularVel = 0;
     return true;
   }
 
@@ -368,9 +369,8 @@ export class KiteEntity {
     this.disbicarBoost *= Math.pow(0.035, stepDt);
     if (this.disqueCooldown > 0) this.disqueCooldown = Math.max(0, this.disqueCooldown - stepDt);
     if (this.disbicarCooldown > 0) this.disbicarCooldown = Math.max(0, this.disbicarCooldown - stepDt);
-    if (this.spinCooldown > 0) this.spinCooldown = Math.max(0, this.spinCooldown - stepDt);
+    if (this.turnCooldown > 0) this.turnCooldown = Math.max(0, this.turnCooldown - stepDt);
     if (this.retaoCooldown > 0) this.retaoCooldown = Math.max(0, this.retaoCooldown - stepDt);
-    if (this.spinTimer > 0) this.spinTimer = Math.max(0, this.spinTimer - stepDt);
     if (this.retaoBoost > 0) this.retaoBoost = Math.max(0, this.retaoBoost - stepDt);
     if (this.largadaCooldown > 0) this.largadaCooldown = Math.max(0, this.largadaCooldown - stepDt);
     if (this.largadaBoost > 0) this.largadaBoost = Math.max(0, this.largadaBoost - stepDt);
@@ -406,11 +406,16 @@ export class KiteEntity {
     // Steering is a heading target, not an endless angular-speed command.
     // Manual controls return the nose toward center when released; AI supplies
     // its own world-relative target so every kite uses the same stable servo.
-    let steerTarget = THREE.MathUtils.clamp(
-      Number.isFinite(controls.steerTarget) ? controls.steerTarget : steer * 0.78,
-      -Math.PI,
-      Math.PI
-    );
+    if (this.isPlayer && Math.abs(steer) > 0.02) {
+      this.directionTarget = steer * 1.12;
+    }
+    let steerTarget = this.isPlayer
+      ? this.directionTarget
+      : THREE.MathUtils.clamp(
+          Number.isFinite(controls.steerTarget) ? controls.steerTarget : steer * 0.78,
+          -Math.PI,
+          Math.PI
+        );
     if (this.retaoBoost > 0.05) steerTarget = this.retaoHeading;
     let headingError = steerTarget - this.noseAngle;
     while (headingError > Math.PI) headingError -= Math.PI * 2;
@@ -423,7 +428,6 @@ export class KiteEntity {
     );
     const angularResponse = 1 - Math.exp(-stepDt * (13 + spec.turnMult * 3));
     this.angularVel += (targetAngularVelocity - this.angularVel) * angularResponse;
-    if (this.spinTimer > 0) this.angularVel = this.spinDirection * 8.8;
 
     // Untrimmed kites retain a little natural wobble, but it cannot overpower
     // the pilot's heading target.
@@ -515,12 +519,13 @@ export class KiteEntity {
     // Because this runs in KiteEntity.update, every kite model and AI rival gets it.
     const steeringDemand = Math.abs(steer);
     const pullDemand = controls.pull ? 1 : 0;
-    const maneuverDemand = Math.max(steeringDemand, pullDemand, this.retaoBoost > 0.05 ? 1 : 0);
+    const selectedTurnDemand = this.isPlayer ? Math.abs(this.directionTarget) / 1.12 : steeringDemand;
+    const maneuverDemand = Math.max(steeringDemand, pullDemand, selectedTurnDemand * 0.7, this.retaoBoost > 0.05 ? 1 : 0);
     if (maneuverDemand > 0.02) {
       const windFactor = THREE.MathUtils.clamp(this.localWind.length() / 9, 0.62, 1.42);
       const activeInput = pullDemand + steeringDemand * 0.65 + this.disbicarBoost * 0.35;
       const desiredForwardSpeed = THREE.MathUtils.clamp(
-        (activeInput * 9.8 + this.socadaBoost * 5.0 + this.disbicarBoost * 4.0 + this.retaoBoost * 5.5)
+        (activeInput * 9.8 + selectedTurnDemand * 2.6 + this.socadaBoost * 5.0 + this.disbicarBoost * 4.0 + this.retaoBoost * 7.0)
           * spec.speedMult * windFactor,
         0,
         18
