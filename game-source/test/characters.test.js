@@ -66,6 +66,13 @@ test('humanoid character construction uses rounded anatomical geometry', async (
 });
 
 
+test('the game loads the rigged-human generator on demand rather than in the initial bundle', async () => {
+  const { readFileSync } = await import('node:fs');
+  const worldSource = readFileSync(new URL('../src/world.js', import.meta.url), 'utf8');
+  assert.match(worldSource, /await import\('ara3d'\)/);
+  assert.doesNotMatch(worldSource, /^import\s+.*from\s+['"]ara3d['"]/m);
+});
+
 test('the main player recipe uses a fully dressed rigged streetwear human', () => {
   const params = PLAYER_ARA_CHARACTER.params;
   assert.equal(PLAYER_ARA_CHARACTER.kind, 'ara-character');

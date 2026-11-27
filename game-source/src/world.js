@@ -5,7 +5,6 @@ import {
   createCorrugatedRoofTexture
 } from './textures.js';
 import { createNpcAppearance, PLAYER_PIPEIRO_APPEARANCE, PLAYER_ARA_CHARACTER, createNpcAraCharacter } from './characters.js';
-import { createCharacter } from 'ara3d';
 
 export const WEATHER_PRESETS = {
   tarde: {
@@ -553,6 +552,8 @@ export class GameWorld {
   }
 
   async _loadAraCharacter({ avatar, profile, options }) {
+    // Keep the main game bundle light; the human generator is downloaded only when the avatar is needed.
+    const { createCharacter } = await import('ara3d');
     const character = await createCharacter(profile, {
       detail: options.detail || 'low',
       animations: ['idle', 'walk', 'run'],
