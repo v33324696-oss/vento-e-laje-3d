@@ -16,6 +16,7 @@ import { RivalAIController } from './ai.js';
 import { evaluateReloScore } from './relo.js';
 import { ProgressionStore } from './progression.js';
 import { getAIDifficulty, getCombatDamageMultipliers } from './difficulty.js';
+import { findRabiolaCapture } from './capture.js';
 
 class Pipa3DGame {
   constructor() {
@@ -1373,41 +1374,53 @@ class Pipa3DGame {
     let playerReloIntensity = 0;
     let playerReloSpeed = 0;
 
-    // 1. Check Drifting Kites ("Aparar Pipa no Alto")
+    // 1. Aparar pipa voada: the catching line must physically touch the
+    // loose rabiola. Kite-body proximity and the cut-off string do not count.
     for (const dk of this.driftingKites) {
       if (!dk.alive || dk.age < 0.75) continue;
-      for (const k of activeKites) {
-        // Check kite body or upper string catching drifting kite or its trailing line
-        let caught = k.position.distanceTo(dk.position) < 3.1;
-        if (!caught) {
-          for (let s = 14; s < STRING_SEGMENTS; s += 2) {
-            const sn = k.stringNodes[s];
-            for (let t = 0; t < dk.trailNodes.length; t += 2) {
-              if (sn.distanceToSquared(dk.trailNodes[t]) < 5.2) {
-                caught = true;
-                break;
-              }
-            }
-            if (caught) break;
-          }
-        }
+      const tailCount = dk.visual?.activeTailNodes || 0;
+      if (tailCount < 5) continue;
+      const rabiolaNodes = dk.visual.tailNodes.slice(0, tailCount);
 
-        if (caught) {
-          dk.alive = false;
-          this.effects.emitSparks(dk.position, 14, true);
-          if (k.isPlayer) {
-            this.catches++;
-            this._recordProgress('catch');
-            const pts = 250 * this.combo;
-            this.score += pts;
-            this.combo = Math.min(8, this.combo + 1);
-            this.sound.playCatch();
-            this.showBanner('APAROU NO ALTO!', `Laçou a pipa avoada! +${pts} pts`, 'catch');
-          } else {
-            this.showBanner('XEPA AÉREA', `${k.name} aparou uma pipa no alto!`, 'normal');
-          }
-          break;
+      for (const k of activeKites) {
+        if (!k.active || !Array.isArray(k.stringNodes)) continue;
+        const capture = findRabiolaCapture(
+          k.stringNodes,
+          rabiolaNodes,
+          0.22,
+          2
+        );
+        if (!capture) continue;
+
+        dk.alive = false;
+        this.effects.spawnCaughtRabiola({
+          ownerId: k.id,
+          lineU: capture.lineU,
+          sourceNodes: rabiolaNodes,
+          capturePoint: capture.linePoint,
+          primaryColor: dk.visual.spec.ribbonColor,
+          accentColor: dk.visual.spec.accentRibbonColor,
+          scale: dk.visual.spec.scale * dk.visual.group.scale.x
+        });
+        this.effects.emitSparks(capture.point, 18, true);
+
+        if (k.isPlayer) {
+          this.catches++;
+          this._recordProgress('catch');
+          const pts = 250 * this.combo;
+          this.score += pts;
+          this.combo = Math.min(8, this.combo + 1);
+          this.sound.playCatch();
+          const modelName = KITE_MODELS[dk.modelId]?.name || 'pipa avoada';
+          this.showBanner(
+            'APAROU NA RABIOLA!',
+            `Você laçou a rabiola da ${modelName} na sua linha! +${pts} pts`,
+            'catch'
+          );
+        } else {
+          this.showBanner('XEPA AÉREA', `${k.name} laçou uma rabiola no alto!`, 'normal');
         }
+        break;
       }
     }
 
@@ -1997,7 +2010,10 @@ class Pipa3DGame {
       }
     }
 
-    this.effects.update(this.windVec, dt);
+    this.effects.update(this.windVec, dt, [
+      ...(this.playerKite.active ? [this.playerKite] : []),
+      ...this._getActiveRivals().filter((r) => r.kite.active).map((r) => r.kite)
+    ]);
     this._updateRemotePlayers(dt);
     this._sendNetworkState(nowMs);
 
