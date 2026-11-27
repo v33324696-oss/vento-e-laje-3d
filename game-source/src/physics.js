@@ -97,6 +97,9 @@ export class KiteEntity {
     this.windPhase = getWindPhase(id || modelId);
     this.localWind = new THREE.Vector3();
     this.aeroDynamicPressure = 0;
+    this.angleOfAttack = 0.26;
+    this.bankAngle = 0;
+    this.stalled = false;
 
     this.tension = 0.32;
     this.reelSpeed = 0; // + paying out, - reeling in
@@ -167,6 +170,9 @@ export class KiteEntity {
     this.angularVel = 0;
     this.cableTension = 0;
     this.tension = 0.32;
+    this.angleOfAttack = 0.26;
+    this.bankAngle = 0;
+    this.stalled = false;
     this.velocity.set(0, 0, 0);
 
     this.lineLength = lowLaunch ? 24 : (this.isPlayer ? 58 : 54 + Math.random() * 22);
@@ -248,13 +254,17 @@ export class KiteEntity {
     _noseDir.copy(_tUp).multiplyScalar(cosA).addScaledVector(_tRight, sinA).normalize();
 
     // Front (+Z of kite) faces generally toward anchor (-_rad), pitched back by angle of attack
-    const aoa = 0.36 - this.tension * 0.14 - this.socadaBoost * 0.08;
+    const aoa = THREE.MathUtils.clamp(this.angleOfAttack - this.tension * 0.035 - this.socadaBoost * 0.04, 0.08, 0.68);
     _kiteZ.copy(_rad).negate().addScaledVector(_noseDir, -aoa).normalize();
     _kiteX.crossVectors(_noseDir, _kiteZ).normalize();
     _kiteY.crossVectors(_kiteZ, _kiteX).normalize();
 
     _rotMat.makeBasis(_kiteX, _kiteY, _kiteZ);
     this.quaternion.setFromRotationMatrix(_rotMat);
+    if (Math.abs(this.bankAngle) > 0.0001) {
+      _bankQuat.setFromAxisAngle(_noseDir, this.bankAngle);
+      this.quaternion.multiply(_bankQuat);
+    }
     void windVec;
   }
 
@@ -390,14 +400,32 @@ export class KiteEntity {
     _noseDir.copy(_tUp).multiplyScalar(cosA).addScaledVector(_tRight, sinA).normalize();
 
     _airRelative.subVectors(this.localWind, this.velocity);
+    const apparentSpeed = Math.max(0.001, _airRelative.length());
+    const sideSlip = Math.abs(_airRelative.dot(_tRight)) / apparentSpeed;
+    const maneuverLoad = Math.abs(steer) * 0.12 + Math.abs(this.angularVel) * 0.018;
+    const targetAoA = THREE.MathUtils.clamp(
+      0.24 + sideSlip * 0.38 + maneuverLoad + (1 - this.tension) * 0.035,
+      0.07,
+      0.82
+    );
+    this.angleOfAttack += (targetAoA - this.angleOfAttack) * Math.min(1, stepDt * 3.8);
+    const targetBank = THREE.MathUtils.clamp(
+      -steer * 0.42 + this.angularVel * 0.035 + sideSlip * Math.sign(_airRelative.dot(_tRight)) * 0.10,
+      -0.62,
+      0.62
+    );
+    this.bankAngle += (targetBank - this.bankAngle) * Math.min(1, stepDt * 4.8);
+
     const aero = calculateAerodynamicForces({
       airVelocity: _airRelative,
       spanDirection: _tRight,
       forwardDirection: _noseDir,
       modelId: spec.id,
-      tailRatio
+      tailRatio,
+      angleOfAttack: this.angleOfAttack
     });
     this.aeroDynamicPressure = aero.dynamicPressure;
+    this.stalled = aero.stalled;
 
     // Gravity is in game-scale units. Lift and drag are quadratic in apparent
     // wind speed; steering changes the kite attitude, not a preset target speed.
@@ -463,7 +491,7 @@ export class KiteEntity {
 
     // 5. Update 3D Kite Visual, Rabiola & Catenary String
     this._updateOrientation(this.localWind);
-    const aeroLoad = Math.min(1.2, 0.16 + Math.min(0.68, this.aeroDynamicPressure * 0.007) + this.tension * 0.28 + this.socadaBoost * 0.4);
+    const aeroLoad = Math.min(1.2, 0.16 + Math.min(0.68, this.aeroDynamicPressure * 0.007) + this.tension * 0.28 + this.socadaBoost * 0.4 - (this.stalled ? 0.10 : 0));
 
     this.visual.update({
       position: this.position,
