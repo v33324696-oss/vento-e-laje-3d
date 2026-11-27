@@ -2357,7 +2357,7 @@ class Pipa3DGame {
     const second = frames[Math.min(frames.length - 1, index + 1)];
     this._applyReplayKite(this.playerKite, first.player, second.player, alpha);
 
-    let midpoint = _replayPosition.copy(this.playerKite.position);
+    const midpoint = _replayMidpoint.copy(this.playerKite.position);
     let rivalCount = 0;
     for (let i = 0; i < this.rivals.length; i++) {
       const a = first.rivals[i];
@@ -2602,6 +2602,7 @@ const _heldKiteEuler = new THREE.Euler();
 const _launchForward = new THREE.Vector3();
 const _recoveryTarget = new THREE.Vector3();
 
+const _replayMidpoint = new THREE.Vector3();
 const _replayPosition = new THREE.Vector3();
 const _replayNextPosition = new THREE.Vector3();
 const _replayQuaternion = new THREE.Quaternion();
