@@ -1333,8 +1333,8 @@ class Pipa3DGame {
         }
 
         // Active RELO Contact!
-        const reloThreshold = 1.42;
-        if (minDist < reloThreshold && crossingQuality > 0.16) {
+        const reloThreshold = 1.8;
+        if (minDist < reloThreshold && crossingQuality > 0.09) {
           kA.inRelo = true;
           kB.inRelo = true;
 
@@ -1351,8 +1351,10 @@ class Pipa3DGame {
           const powerB = this._computeCutAttackPower(kB, uB, uA, crossingQuality, relativeSpeed, kA);
 
           // Correct angle, entry height and timing decide who loses line integrity.
-          kB.lineIntegrity -= powerA * dt * 0.92 / (kB.lineType.durability || 1);
-          kA.lineIntegrity -= powerB * dt * 0.92 / (kA.lineType.durability || 1);
+          const damageA = kA.isPlayer ? 1.28 : 0.92;
+          const damageB = kB.isPlayer ? 1.28 : 0.92;
+          kB.lineIntegrity -= powerA * dt * damageA / (kB.lineType.durability || 1);
+          kA.lineIntegrity -= powerB * dt * damageB / (kA.lineType.durability || 1);
 
           if (involvesPlayer) {
             playerReloIntensity = 1.0;
@@ -1593,9 +1595,8 @@ class Pipa3DGame {
       card.classList.add('in-relo');
       titleEl.textContent = '🔥 RELO! LINHAS CRUZANDO!';
       distEl.textContent = 'ATRITO!';
-      if (cue.crossingQuality >= 0.72) hintEl.textContent = 'CRUZAMENTO LIMPO — toque em DAR LINHA no tempo certo para a largada!';
-      else if (cue.crossingQuality >= 0.34) hintEl.textContent = 'ÂNGULO MÉDIO — ajuste a posição antes de descarregar a linha.';
-      else hintEl.textContent = 'ENTRADA RUIM — linhas quase paralelas; reposicione ou você pode perder.';
+      if (cue.crossingQuality >= 0.34) hintEl.textContent = 'RELO ATIVO — segure W (PUXAR) e toque ESPAÇO (SOCAR). Q/E ajudam no giro.';
+      else hintEl.textContent = 'LINHAS EM CONTATO — ajuste com A/D e use W + ESPAÇO para aumentar o corte.';
     } else {
       card.classList.remove('in-relo');
       titleEl.textContent = cue.playerInFront ? 'LINHA PELA FRENTE' : 'LINHA POR TRÁS';
@@ -1605,7 +1606,7 @@ class Pipa3DGame {
         : cue.crossingQuality >= 0.34
           ? 'Ângulo médio — ajuste a entrada antes do contato.'
           : 'Entrada quase paralela — reposicione para não ficar em desvantagem.';
-      hintEl.textContent = `${cue.playerInFront ? 'Sua linha está mais rasa. ' : 'Sua linha está mais funda. '}${approachHint}`;
+      hintEl.textContent = `${cue.playerInFront ? 'Sua linha está mais rasa. ' : 'Sua linha está mais funda. '}${approachHint} Quando encostar e aparecer RELO, segure W e toque ESPAÇO.`;
     }
   }
 
