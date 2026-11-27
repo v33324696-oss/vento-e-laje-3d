@@ -1168,3 +1168,102 @@ button { touch-action: manipulation; }
   .touch-action-btn { min-height: 40px; }
   .center-alerts { top: 58px; }
 }
+
+
+/* Career hub and match-readable RELO HUD */
+.career-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, .9fr);
+  align-items: center;
+  gap: 18px;
+  padding: 15px 17px;
+  margin: 0 0 13px;
+  text-align: left;
+  border: 1px solid rgba(125, 211, 252, .22);
+  border-radius: 16px;
+  background: linear-gradient(115deg, rgba(30, 64, 175, .22), rgba(15, 23, 42, .76) 60%, rgba(14, 116, 144, .18));
+  box-shadow: inset 0 1px rgba(255,255,255,.05), 0 12px 30px rgba(0,0,0,.18);
+}
+.career-profile { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.career-avatar {
+  width: 49px; height: 49px; flex: 0 0 49px;
+  display: grid; place-items: center;
+  border: 1px solid rgba(250, 204, 21, .42);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(250,204,21,.2), rgba(249,115,22,.12));
+  font-size: 25px;
+}
+.career-identity { display: flex; flex: 1; min-width: 0; flex-direction: column; align-items: flex-start; gap: 3px; }
+.career-identity label, .career-level span, .career-xp-label, .career-footer, .section-eyebrow, .mission-reset {
+  color: var(--text-muted); font-size: 9px; font-weight: 900; letter-spacing: .09em;
+}
+.career-identity input {
+  width: min(190px, 100%); padding: 0; border: 0; outline: 0;
+  color: white; background: transparent; font: 800 16px var(--font-ui);
+}
+.career-identity input:focus { border-bottom: 1px solid var(--gold); }
+.career-identity strong { color: #7dd3fc; font-size: 10px; }
+.career-level {
+  min-width: 48px; height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  border: 1px solid rgba(250,204,21,.38); border-radius: 12px; background: rgba(250,204,21,.09);
+}
+.career-level strong { color: var(--gold); font-size: 23px; line-height: 1; }
+.career-progress { display: flex; flex-direction: column; gap: 7px; }
+.career-xp-label { display: flex; justify-content: space-between; gap: 8px; font-size: 8px; }
+.career-xp-label span:last-child { color: #fde68a; font-variant-numeric: tabular-nums; }
+.career-xp-track { width: 100%; height: 8px; overflow: hidden; border-radius: 99px; background: rgba(255,255,255,.1); }
+.career-xp-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, #38bdf8, #facc15); box-shadow: 0 0 12px rgba(56,189,248,.32); transition: width .3s ease; }
+.career-footer { display: flex; justify-content: space-between; gap: 8px; font-size: 9px; letter-spacing: 0; }
+.career-footer span:first-child { color: #fcd34d; }
+.career-footer strong { color: white; font-variant-numeric: tabular-nums; }
+.mission-panel {
+  margin: 0 0 22px; padding: 13px 15px;
+  text-align: left; border: 1px solid rgba(255,255,255,.1);
+  border-radius: 15px; background: rgba(2,6,23,.36);
+}
+.mission-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.mission-heading h2 { margin-top: 2px; color: white; font-size: 15px; font-weight: 900; }
+.section-eyebrow { color: #7dd3fc; font-size: 8px; }
+.mission-reset { padding: 5px 7px; border: 1px solid rgba(52,211,153,.2); border-radius: 99px; color: #6ee7b7; font-size: 7px; white-space: nowrap; }
+.mission-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.mission-item { min-width: 0; padding: 10px; border: 1px solid rgba(255,255,255,.09); border-radius: 11px; background: rgba(255,255,255,.035); }
+.mission-item.done { border-color: rgba(52,211,153,.34); background: rgba(16,185,129,.08); }
+.mission-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
+.mission-top strong { color: white; font-size: 10px; line-height: 1.25; }
+.mission-reward { flex: 0 0 auto; color: #fcd34d; font-size: 8px; font-weight: 800; white-space: nowrap; }
+.mission-item p { min-height: 25px; margin: 4px 0 8px; color: var(--text-muted); font-size: 9px; line-height: 1.35; }
+.mission-progress-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; color: #cbd5e1; font-size: 8px; font-weight: 800; }
+.mission-progress-track { height: 4px; margin-top: 5px; overflow: hidden; border-radius: 99px; background: rgba(255,255,255,.1); }
+.mission-progress-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, #38bdf8, #34d399); }
+.relo-hp-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 6px; }
+.relo-hp-item { min-width: 0; }
+.relo-hp-caption { display: flex; justify-content: space-between; gap: 5px; margin-bottom: 3px; color: #cbd5e1; font-size: 8px; font-weight: 900; letter-spacing: .04em; }
+.relo-hp-caption b { color: white; font-variant-numeric: tabular-nums; }
+.relo-meter-track { margin: 0; }
+.rival-track { background: rgba(56,189,248,.2); }
+.rival-fill { background: linear-gradient(90deg, #38bdf8, #a78bfa); }
+.proximity-card.in-relo .rival-fill { background: linear-gradient(90deg, #38bdf8, #c084fc); }
+.mode-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.mode-card { min-height: 142px; }
+@media (max-width: 820px) {
+  .career-panel { grid-template-columns: 1fr; gap: 11px; padding: 12px; }
+  .career-profile { gap: 9px; }
+  .career-avatar { width: 42px; height: 42px; flex-basis: 42px; font-size: 21px; }
+  .career-level { width: 43px; height: 43px; min-width: 43px; }
+  .career-level strong { font-size: 20px; }
+  .career-identity input { font-size: 14px; }
+  .mission-list { grid-template-columns: 1fr; gap: 6px; }
+  .mission-item { padding: 8px 10px; }
+  .mission-item p { min-height: 0; margin: 2px 0 5px; }
+  .mode-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-bottom: 14px; }
+  .mode-card { min-height: 0; padding: 10px; }
+  .mc-icon { font-size: 19px; margin-bottom: 3px; }
+  .mc-title { font-size: 11px; }
+  .mc-desc { font-size: 9px; line-height: 1.3; }
+  .mission-panel { margin-bottom: 14px; padding: 10px; }
+}
+@media (max-width: 390px) {
+  .career-footer { font-size: 8px; }
+  .relo-hp-pair { gap: 6px; }
+  .relo-hp-caption { font-size: 7px; }
+}
