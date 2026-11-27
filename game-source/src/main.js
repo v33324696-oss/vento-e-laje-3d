@@ -581,6 +581,7 @@ class Pipa3DGame {
       linePower: this.playerKite.lineType.cutPower * this.playerKite.visual.spec.powerMult,
       lineDurability: this.playerKite.lineType.durability || 1,
       lineRecovery: this.playerKite.lineType.recovery || 0.45,
+      lineDischargeSafe: this.playerKite.lineType.dischargeSafe === true,
       lineIntegrity: this.playerKite.lineIntegrity
     });
   }
@@ -1366,6 +1367,7 @@ class Pipa3DGame {
     // Describe authentic Brazilian cut technique
     let moveName = 'no relo';
     if (winner.disqueBoost > 0.2) moveName = 'no disque';
+    else if (winner.disbicarBoost > 0.2) moveName = 'no disbicar';
     else if (winner.socadaBoost > 0.25) moveName = 'na socada';
     else if (winner.largadaTagTimer > 0 && winner.largadaQuality >= 0.68) moveName = 'na largada';
     else if (winner.reelSpeed < -9) moveName = 'na puxada';
