@@ -491,6 +491,7 @@ export class DriftingKite {
     this.alive = true;
     this.snagged = false;
     this.recovering = false;
+    this.recoveryPulling = false;
     this.recoveryProgress = 0;
     this.recoveryTarget = new THREE.Vector3();
 
@@ -529,11 +530,13 @@ export class DriftingKite {
     if (this.snagged) return;
 
     this.tumblePhase += dt * (this.recovering ? 1.45 : 3.1);
-    if (this.recovering) {
-      // The kite is hauled down only while the player holds the reel control.
+    if (this.recovering && this.recoveryPulling) {
+      // The kite is hauled down only while the player actively holds the reel control.
       _tmpSub.subVectors(this.recoveryTarget, this.position);
       this.velocity.copy(_tmpSub).multiplyScalar(1.7);
       this.position.addScaledVector(this.velocity, dt);
+    } else if (this.recovering) {
+      this.velocity.multiplyScalar(Math.max(0, 1 - dt * 4));
     } else {
       // Unattached kite floats downwind, bobbing & gliding laterally ("boiando no vento")
       this.velocity.x = windVec.x * 0.88 + Math.sin(this.tumblePhase) * 3.6;
