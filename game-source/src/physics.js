@@ -280,7 +280,7 @@ export class KiteEntity {
     const direction = _ropeDelta.multiplyScalar(1 / Math.max(0.001, span));
     const slack = Math.max(0, this.lineLength - span);
     const tensionFactor = THREE.MathUtils.clamp((this.tension - 0.22) / 0.58, 0, 1);
-    const sag = Math.min(4.8, Math.sqrt(Math.max(0, 2 * span * slack)) * 0.13)
+    const sag = Math.min(2.4, Math.sqrt(Math.max(0, 2 * span * slack)) * 0.075)
       * (1 - tensionFactor * 0.78);
     _ropeSide.crossVectors(direction, _worldUp).normalize();
     if (_ropeSide.lengthSq() < 0.001) _ropeSide.set(1, 0, 0);
