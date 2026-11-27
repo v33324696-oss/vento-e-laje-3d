@@ -54,7 +54,7 @@ class Pipa3DGame {
     this.padSteer = 0;
     this.touchMove = new Set();
     this.touchSprint = false;
-    this.uiHold = { pull: false, release: false };
+    this.uiHold = { pull: false, release: false, quickRelease: false };
     this.pointer = {
       down: false,
       rightDown: false,
@@ -574,6 +574,7 @@ class Pipa3DGame {
       reelSpeed: this.playerKite.reelSpeed,
       socada: this.playerKite.socadaBoost,
       disque: this.playerKite.disqueBoost,
+      disbicar: this.playerKite.disbicarBoost,
       largadaActive: this.playerKite.largadaBoost > 0,
       largadaTagActive: this.playerKite.largadaTagTimer > 0,
       largadaQuality: this.playerKite.largadaQuality,
@@ -808,6 +809,12 @@ class Pipa3DGame {
           this.playerKite.triggerDisque(1);
           this.sound.playSocada(0.85);
           this._flashDeckBtn('act-disque-r');
+        } else if (code === 'KeyB' && !this.characterMode) {
+          const direction = Math.abs(this.padSteer) > 0.2 ? this.padSteer : (Math.sign(this.playerKite.noseAngle) || 1);
+          if (this.playerKite.triggerDisbicar(direction)) {
+            this.sound.playSocada(0.75);
+            this._flashDeckBtn('act-disbicar');
+          }
         } else if (code === 'KeyC') {
           this.cycleCamera();
         } else if (code === 'KeyV') {
@@ -907,6 +914,16 @@ class Pipa3DGame {
     bindHoldBtn('pad-right', () => { this.padSteer = 1; }, () => { if (this.padSteer > 0) this.padSteer = 0; });
     bindHoldBtn('act-pull', () => { this.uiHold.pull = true; }, () => { this.uiHold.pull = false; });
     bindHoldBtn('act-release', () => { this.uiHold.release = true; }, () => { this.uiHold.release = false; });
+    bindHoldBtn('act-release-fast', () => { this.uiHold.quickRelease = true; }, () => { this.uiHold.quickRelease = false; });
+    document.getElementById('act-disbicar').addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      this.sound.init();
+      const direction = Math.abs(this.padSteer) > 0.2 ? this.padSteer : (Math.sign(this.playerKite.noseAngle) || 1);
+      if (this.playerKite.triggerDisbicar(direction)) {
+        this.sound.playSocada(0.75);
+        this._flashDeckBtn('act-disbicar');
+      }
+    });
 
     document.getElementById('act-socar').addEventListener('pointerdown', (e) => {
       e.preventDefault();
@@ -963,7 +980,7 @@ class Pipa3DGame {
   }
 
   _gatherPlayerControls() {
-    if (this.characterMode) { this.previousReleaseHeld = false; return { pull: false, release: false, steer: 0, largada: false }; }
+    if (this.characterMode) { this.previousReleaseHeld = false; return { pull: false, release: false, quickRelease: false, steer: 0, largada: false }; }
     if (!this.started) {
       // Gentle scenic autopilot on title screen!
       const t = performance.now() * 0.001;
@@ -971,6 +988,7 @@ class Pipa3DGame {
       return {
         pull: false,
         release: false,
+        quickRelease: false,
         largada: false,
         steer: Math.sin(t * 0.85) * 0.32
       };
@@ -998,17 +1016,20 @@ class Pipa3DGame {
     }
 
     const pull = pullKey || this.uiHold.pull || pointerHeldPull;
-    const release = !pull && (relKey || this.uiHold.release || this.pointer.rightDown);
-    const largada = release && !this.previousReleaseHeld;
-    this.previousReleaseHeld = release;
+    const quickRelease = !pull && (!!this.keys['KeyR'] || this.uiHold.quickRelease);
+    const release = !pull && !quickRelease && (relKey || this.uiHold.release || this.pointer.rightDown);
+    const dischargeHeld = release || quickRelease;
+    const largada = dischargeHeld && !this.previousReleaseHeld;
+    this.previousReleaseHeld = dischargeHeld;
 
     // Highlight HUD buttons to mirror keyboard actions
     document.getElementById('act-pull')?.classList.toggle('pressed', pull);
     document.getElementById('act-release')?.classList.toggle('pressed', release);
+    document.getElementById('act-release-fast')?.classList.toggle('pressed', quickRelease);
     document.getElementById('pad-left')?.classList.toggle('pressed', steer < -0.2);
     document.getElementById('pad-right')?.classList.toggle('pressed', steer > 0.2);
 
-    return { pull, release, largada, steer };
+    return { pull, release, quickRelease, largada, steer };
   }
 
   showBanner(tag, text, style = 'normal') {
@@ -1190,8 +1211,10 @@ class Pipa3DGame {
           const uB = bestJ / STRING_SEGMENTS;
 
           const relativeSpeed = kA.velocity.distanceTo(kB.velocity);
-          const powerA = this._computeCutAttackPower(kA, uA, uB, crossingQuality, relativeSpeed);
-          const powerB = this._computeCutAttackPower(kB, uB, uA, crossingQuality, relativeSpeed);
+          kA.reloContactTime = Math.min(0.9, kA.reloContactTime + dt);
+          kB.reloContactTime = Math.min(0.9, kB.reloContactTime + dt);
+          const powerA = this._computeCutAttackPower(kA, uA, uB, crossingQuality, relativeSpeed, kB);
+          const powerB = this._computeCutAttackPower(kB, uB, uA, crossingQuality, relativeSpeed, kA);
 
           // Correct angle, entry height and timing decide who loses line integrity.
           kB.lineIntegrity -= powerA * dt * 0.92 / (kB.lineType.durability || 1);
@@ -1210,11 +1233,15 @@ class Pipa3DGame {
             const loserU = aWins ? uB : uA;
             this._executeLineCut(winner, loser, _midPt, loserU);
           }
-        } else {
-          // Lines slowly recover integrity when not rubbing
-          kA.lineIntegrity = Math.min(1.0, kA.lineIntegrity + dt * (kA.lineType.recovery || 0.45));
-          kB.lineIntegrity = Math.min(1.0, kB.lineIntegrity + dt * (kB.lineType.recovery || 0.45));
         }
+      }
+    }
+
+    // Recover line HP once per kite, independent of how many rivals are nearby.
+    for (const kite of activeKites) {
+      if (!kite.inRelo) {
+        kite.lineIntegrity = Math.min(1.0, kite.lineIntegrity + dt * (kite.lineType.recovery || 0.45));
+        kite.reloContactTime = Math.max(0, kite.reloContactTime - dt * 2.4);
       }
     }
 
@@ -1250,7 +1277,27 @@ class Pipa3DGame {
     };
   }
 
-  _computeCutAttackPower(attacker, uSelf, uEnemy, crossingQuality = 0, relativeSpeed = 0) {
+  _getRearAdvantage(attacker, defender) {
+    let fx = defender.velocity.x, fy = defender.velocity.y, fz = defender.velocity.z;
+    let fl = Math.hypot(fx, fy, fz);
+    if (fl < 0.8) {
+      fx = defender.position.x - defender.anchorPos.x;
+      fy = defender.position.y - defender.anchorPos.y;
+      fz = defender.position.z - defender.anchorPos.z;
+      fl = Math.hypot(fx, fy, fz) || 1;
+    }
+    const rx = attacker.position.x - defender.position.x;
+    const ry = attacker.position.y - defender.position.y;
+    const rz = attacker.position.z - defender.position.z;
+    const rl = Math.hypot(rx, ry, rz) || 1;
+    const alignment = (rx * fx + ry * fy + rz * fz) / (rl * fl);
+    return alignment < -0.25 ? 1 : 0;
+  }
+
+  _computeCutAttackPower(attacker, uSelf, uEnemy, crossingQuality = 0, relativeSpeed = 0, defender = null) {
+    const defenderExposure = defender && defender.reelSpeed > 5 && !defender.lineType.dischargeSafe
+      ? THREE.MathUtils.clamp((defender.reelSpeed - 5) / 22, 0, 1)
+      : 0;
     return evaluateReloScore({
       crossingQuality,
       tension: attacker.tension,
@@ -1259,10 +1306,13 @@ class Pipa3DGame {
       relativeSpeed,
       socada: attacker.socadaBoost,
       disque: attacker.disqueBoost,
+      disbicar: attacker.disbicarBoost,
       largadaActive: attacker.largadaBoost > 0,
       largadaQuality: attacker.largadaQuality,
       linePower: attacker.lineType.cutPower * attacker.visual.spec.powerMult,
-      wrapQuality: attacker.inRelo ? 0.72 : 0.08,
+      wrapQuality: THREE.MathUtils.clamp(attacker.reloContactTime / 0.42, 0, 1),
+      rearAdvantage: defender ? this._getRearAdvantage(attacker, defender) : 0,
+      defenderExposure,
       ownU: uSelf,
       targetU: uEnemy
     });
@@ -1343,11 +1393,15 @@ class Pipa3DGame {
 
       if (winner.isPlayer) {
         this.cuts++;
-        const pts = 150 * this.combo;
+        const basePts = 150 * this.combo;
+        const weakLineBonus = loser.lineType.cutPower > winner.lineType.cutPower ? 100 : 0;
+        const pts = basePts + weakLineBonus;
         this.score += pts;
+        const comboLabel = this.combo >= 6 ? 'HEXA' : this.combo === 5 ? 'PENTA' : this.combo === 4 ? 'QUADRA' : this.combo === 3 ? 'TRIPLO' : this.combo === 2 ? 'DUPLO' : '';
         this.combo = Math.min(8, this.combo + 1);
         this.sound.playCut(true);
-        this.showBanner('MANDOU!', `Cortou ${loser.name} ${moveName}! +${pts} pts`, 'normal');
+        const bonusText = `${comboLabel ? ` • ${comboLabel}` : ''}${weakLineBonus ? ' • BÔNUS LINHA FRACA' : ''}`;
+        this.showBanner('MANDOU!', `Cortou ${loser.name} ${moveName}! +${pts} pts${bonusText}`, 'normal');
 
         // Advance wave in Torneio mode every 3 cuts!
         if (this.gameMode === 'torneio' && this.cuts % 3 === 0) {
