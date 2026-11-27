@@ -1683,25 +1683,35 @@ class Pipa3DGame {
     }, 3400);
   }
 
-  _updateWind(time) {
+  _updateWind(time, dt = 0.016) {
     const preset = this.world.currentPreset;
-    let speed = preset.baseWind +
-      Math.sin(time * 0.42) * preset.gustStrength * 0.65 +
-      Math.sin(time * 1.15) * preset.gustStrength * 0.35;
+
+    // The previous gust curve changed both wind speed and direction too much.
+    // Keep long, readable gust cycles and reserve strong variation for the
+    // dedicated Ventania weather preset rather than every normal flight.
+    let speed = preset.baseWind
+      + Math.sin(time * 0.17) * preset.gustStrength * 0.32
+      + Math.sin(time * 0.39 + 0.8) * preset.gustStrength * 0.12;
 
     if (this.gameMode === 'torneio') {
-      speed += (this.tournamentWave - 1) * 0.85;
+      speed += (this.tournamentWave - 1) * 0.5;
     } else if (this.gameMode === 'zen') {
-      speed = this.zenWindOverride + Math.sin(time * 0.5) * 0.8;
+      speed = this.zenWindOverride + Math.sin(time * 0.2) * 0.35;
     }
 
-    // Gentle wind directionshifts (-Z primary corridor with realistic lateral breeze)
-    const lateralAngle = Math.sin(time * 0.23) * 0.24 + Math.cos(time * 0.51) * 0.09;
-    this.windVec.set(
+    // Wind mostly follows the same corridor; crosswind changes are gradual
+    // and limited so a kite never gets a sudden sideways shove.
+    const lateralAngle = Math.sin(time * 0.075) * 0.105
+      + Math.cos(time * 0.16) * 0.04;
+    _windTarget.set(
       Math.sin(lateralAngle) * speed,
-      0.45 + Math.sin(time * 0.7) * 0.25,
+      0.22 + Math.sin(time * 0.18) * 0.035,
       -Math.cos(lateralAngle) * speed
     );
+
+    // Smooth weather changes and frame-to-frame gust transitions.
+    const blend = 1 - Math.exp(-Math.max(0.001, dt) * 1.65);
+    this.windVec.lerp(_windTarget, blend);
   }
 
   _processCombatAndCollisions(dt) {
@@ -2428,7 +2438,7 @@ class Pipa3DGame {
       this._updateRabiolaRecovery(dt);
 
     // 1. Update wind, scene and character exploration.
-    this._updateWind(elapsed);
+    this._updateWind(elapsed, dt);
     this._updateCharacterMovement(dt);
     this._updateHeldPlayerKite(dt);
     const camModeId = this.cameraModes[this.camModeIdx].id;
@@ -2608,3 +2618,4 @@ const _replayPosition = new THREE.Vector3();
 const _replayNextPosition = new THREE.Vector3();
 const _replayQuaternion = new THREE.Quaternion();
 const _replayNextQuaternion = new THREE.Quaternion();
+const _windTarget = new THREE.Vector3();
