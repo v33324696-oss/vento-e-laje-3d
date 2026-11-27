@@ -1267,3 +1267,6 @@ button { touch-action: manipulation; }
   .relo-hp-pair { gap: 6px; }
   .relo-hp-caption { font-size: 7px; }
 }
+
+.opt-chip.locked { border-style: dashed; border-color: rgba(250,204,21,.4); color: #fde68a; background: rgba(120,53,15,.12); }
+.opt-chip.locked:hover { background: rgba(120,53,15,.22); }
