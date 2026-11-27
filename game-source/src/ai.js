@@ -1,5 +1,12 @@
 import * as THREE from 'three';
 
+export const RIVAL_PERSONALITY_PROFILES = Object.freeze({
+  hunter: Object.freeze({ aggression: 0.76, segmentBias: 0.82, attackSpread: 0.42, evasion: 0.13, precision: 0.10, feintEvery: 0, memoryRead: 0.055 }),
+  slasher: Object.freeze({ aggression: 0.64, segmentBias: 0.91, attackSpread: 0.34, evasion: 0.18, precision: 0.16, feintEvery: 0, memoryRead: 0.045 }),
+  trickster: Object.freeze({ aggression: 0.53, segmentBias: 0.70, attackSpread: 0.72, evasion: 0.42, precision: -0.03, feintEvery: 3, memoryRead: 0.095 }),
+  balanced: Object.freeze({ aggression: 0.46, segmentBias: 0.78, attackSpread: 0.46, evasion: 0.22, precision: 0.02, feintEvery: 0, memoryRead: 0.06 })
+});
+
 export function createOpponentMemory() {
   return { left: 0, right: 0, pull: 0, release: 0, confidence: 0, preferredSide: 1 };
 }
@@ -27,7 +34,8 @@ export function observeOpponentMemory(memory, playerKite, dt = 0.016) {
 export class RivalAIController {
   constructor(kiteEntity, personality = 'balanced') {
     this.kite = kiteEntity;
-    this.personality = personality; // 'hunter' | 'slasher' | 'trickster' | 'balanced'
+    this.personality = RIVAL_PERSONALITY_PROFILES[personality] ? personality : 'balanced';
+    this.style = RIVAL_PERSONALITY_PROFILES[this.personality];
     this.memory = createOpponentMemory();
     this.focusesPlayer = false;
     this.targetPoint = new THREE.Vector3(
@@ -91,18 +99,14 @@ export class RivalAIController {
           this.targetPoint.copy(chasedDrift.position);
         } else {
           const playerActive = playerKite && playerKite.active;
-          const personalityAggression = this.personality === 'hunter' ? 0.68
-            : this.personality === 'slasher' ? 0.58
-            : this.personality === 'trickster' ? 0.50 : 0.42;
+          const personalityAggression = this.style.aggression;
           const memoryBonus = this.memory.confidence * (this.personality === 'hunter' ? 0.16 : 0.10);
           const rivalryBonus = Math.min(0.28, this.rivalryHeat * 0.12);
           const engagePlayerChance = Math.min(0.98, (personalityAggression + memoryBonus + rivalryBonus) * difficulty);
 
           if (playerActive && Math.random() < engagePlayerChance) {
             this.focusesPlayer = true;
-            const segmentBias = this.personality === 'slasher' ? 0.9
-              : this.personality === 'hunter' ? 0.82
-                : this.personality === 'trickster' ? 0.7 : 0.78;
+            const segmentBias = this.style.segmentBias;
             const idx = Math.floor(playerKite.stringNodes.length * THREE.MathUtils.clamp(segmentBias + (Math.random() - 0.5) * 0.12, 0.62, 0.97));
             const stringPt = playerKite.stringNodes[idx] || playerKite.position;
             const leadTime = 0.18 + skill * 0.42;
@@ -114,13 +118,13 @@ export class RivalAIController {
               .addScaledVector(playerKite.velocity, leadTime)
               .lerp(stringPt, 0.62)
               .add(_offset.set(
-                side * spread * (this.personality === 'trickster' ? 0.72 : 0.42),
+                side * spread * this.style.attackSpread,
                 (Math.random() - 0.5) * spread * 0.3,
                 -side * spread * 0.18
               ));
             // Tricksters feint wide before returning to the line; slashers commit
             // to the higher string section, while hunters pressure the middle.
-            if (this.personality === 'trickster' && this.approachCount % 3 === 0) {
+            if (this.style.feintEvery > 0 && this.approachCount % this.style.feintEvery === 0) {
               this.targetPoint.add(_offset.set(-side * spread * 0.8, 1.1, spread * 0.45));
             } else if (this.personality === 'slasher') {
               this.targetPoint.y += 1.2 + skill * 1.4;
@@ -176,8 +180,8 @@ export class RivalAIController {
     while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
 
     // Hard rivals correct their nose more precisely and more quickly.
-    const memoryRead = this.focusesPlayer ? this.memory.confidence * this.memory.preferredSide * 0.055 : 0;
-    const steerGain = 1.65 + skill * 0.92;
+    const memoryRead = this.focusesPlayer ? this.memory.confidence * this.memory.preferredSide * this.style.memoryRead : 0;
+    const steerGain = 1.65 + skill * 0.92 + this.style.precision;
     const steer = THREE.MathUtils.clamp((angleDiff + memoryRead) * steerGain, -1, 1);
 
     const desiredRadius = THREE.MathUtils.clamp(
@@ -196,7 +200,7 @@ export class RivalAIController {
       // Tricksters try to escape and re-enter; harder settings turn that into
       // a timed largada instead of an endless passive release.
       const threatened = this.kite.lineIntegrity < 0.38;
-      const evasiveChance = this.personality === 'trickster' ? 0.42 - skill * 0.22 : threatened ? 0.24 + (0.38 - this.kite.lineIntegrity) * 0.42 : 0.035;
+      const evasiveChance = THREE.MathUtils.clamp(this.style.evasion - skill * 0.12 + (threatened ? (0.38 - this.kite.lineIntegrity) * 0.42 : 0), 0.025, 0.68);
       if (Math.random() < evasiveChance) {
         release = true;
         quickRelease = this.kite.reloContactTime > 0.14 && this.kite.tension > 0.38

@@ -5,6 +5,7 @@ import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { KiteVisual } from './kiteMesh.js';
 import { LINE_TYPES } from './carretilha.js';
 import { evaluateReloScore } from './relo.js';
+import { getKiteAeroProfile, getWindPhase, sampleWindAt } from './kiteAerodynamics.js';
 
 export const STRING_SEGMENTS = 28;
 
@@ -75,6 +76,8 @@ export class KiteEntity {
     this.id = id;
     this.name = name;
     this.isPlayer = isPlayer;
+    this.windPhase = getWindPhase(id || name);
+    this.localWind = new THREE.Vector3();
 
     this.anchorPos = anchorPos.clone();
     this.lineType = LINE_TYPES[lineTypeId] || LINE_TYPES.rosa_chilena;
@@ -319,6 +322,7 @@ export class KiteEntity {
 
     const stepDt = Math.min(0.033, dt);
     const spec = this.visual.spec;
+    const aeroProfile = getKiteAeroProfile(spec.id);
     const tailRatio = this.visual.getTailRatio();
 
     this.socadaBoost *= Math.pow(0.018, stepDt);
@@ -358,7 +362,7 @@ export class KiteEntity {
 
     // 2. Classic nose rotation: direct steering with natural rabiola recovery.
     const steer = THREE.MathUtils.clamp(controls.steer || 0, -1, 1);
-    const rabicoWildness = 1.0 + (1.0 - tailRatio) * 1.15;
+    const rabicoWildness = (1.0 + (1.0 - tailRatio) * 1.15) * (1.04 - aeroProfile.stability * 0.04);
 
     if (Math.abs(steer) > 0.04) {
       const turnRate = 3.65 * spec.turnMult * rabicoWildness;
@@ -378,8 +382,9 @@ export class KiteEntity {
     if (this.noseAngle < -Math.PI) this.noseAngle += Math.PI * 2;
 
     // 3. Original target-velocity flight model.
-    this.localWind.copy(windVec);
-    const windSpeed = windVec.length();
+    sampleWindAt(windVec, this.position, time, this.windPhase, this.localWind);
+    const flightWind = this.localWind;
+    const windSpeed = flightWind.length();
     this.aeroDynamicPressure = 0.5 * windSpeed * windSpeed;
     this.stalled = false;
 
@@ -407,10 +412,11 @@ export class KiteEntity {
     }
 
     const slack = 1.0 - this.tension;
-    _DesiredVel.addScaledVector(windVec, 0.36 + slack * 0.68);
-    const highAngleDrag = Math.max(0, _rad.y - 0.46) * 9.5;
+    _DesiredVel.addScaledVector(flightWind, 0.36 + slack * 0.68);
+    const highAngleDrag = Math.max(0, _rad.y - (0.43 + aeroProfile.stallAngle * 0.06)) * 9.5;
+    const modelLift = THREE.MathUtils.clamp(1 + (aeroProfile.lift / aeroProfile.mass - 1) * 0.16, 0.92, 1.05);
     const netVertical =
-      (windSpeed * 0.30 * (0.48 + this.tension * 0.52))
+      (windSpeed * 0.30 * (0.48 + this.tension * 0.52) * modelLift)
       - (2.45 + slack * 2.6 + highAngleDrag);
     _DesiredVel.y += netVertical;
 
@@ -455,19 +461,19 @@ export class KiteEntity {
 
     // Preserve condition wear, RELO highlighting and the current physical string.
     const aeroLoad = Math.min(1.2, 0.22 + this.tension * 0.38 + this.socadaBoost * 0.65);
-    this._updateOrientation(windVec);
+    this._updateOrientation(flightWind);
 
     this.visual.update({
       position: this.position,
       quaternion: this.quaternion,
       aeroLoad,
-      windVec,
+      windVec: flightWind,
       sunDir,
       cameraPos,
       dt: stepDt
     });
 
-    this._updateStringCurve(windVec, reloHighlightU, reloHighlightStrength, stepDt);
+    this._updateStringCurve(flightWind, reloHighlightU, reloHighlightStrength, stepDt);
   }
 
   dispose() {
