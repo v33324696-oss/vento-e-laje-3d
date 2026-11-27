@@ -48,6 +48,7 @@ export class SoundEngine {
     this.externalFlapTimer = 0.7;
     this.externalSpoolTimer = 0.3;
     this.reloWasActive = false;
+    this.kiteFlutterVoices = {};
   }
 
   init() {
@@ -169,6 +170,28 @@ export class SoundEngine {
       this.flutterGain.connect(this.masterGain);
       paperNoise.start();
 
+      // Separate filtered paper-air voices let different kite shapes coexist
+      // in the sky without collapsing every model into one shared pitch.
+      for (const [modelId, profile] of Object.entries(KITE_SOUND_PROFILES)) {
+        const source = this.ctx.createBufferSource();
+        source.buffer = this.noiseBuffer;
+        source.loop = true;
+        source.playbackRate.value = profile.rate;
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.value = profile.tapFilter * 0.82;
+        filter.Q.value = 1.05 + profile.rate * 0.18;
+
+        const gain = this.ctx.createGain();
+        gain.gain.value = 0;
+        source.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.masterGain);
+        source.start();
+        this.kiteFlutterVoices[modelId] = { filter, gain, profile };
+      }
+
       this._initReferenceAudio();
       this.initialized = true;
     } catch (e) {
@@ -276,11 +299,40 @@ export class SoundEngine {
       }), { rate: 0, volume: 0, tapTone: 0, tapFilter: 0, tapDuration: 0, airTone: 0 })
       : (KITE_SOUND_PROFILES[kiteModelId] || KITE_SOUND_PROFILES.murcha);
     const hasAirborneKites = kiteActive || activeProfiles.length > 0;
+    const activeModelCounts = new Map();
+    if (Array.isArray(airborneKites)) {
+      for (const kite of airborneKites) {
+        if (!kite || !KITE_SOUND_PROFILES[kite.modelId]) continue;
+        activeModelCounts.set(kite.modelId, (activeModelCounts.get(kite.modelId) || 0) + 1);
+      }
+    }
+    if (kiteActive && activeModelCounts.size === 0) {
+      activeModelCounts.set(kiteModelId, 1);
+    }
+    const activeKiteCount = Math.max(1, [...activeModelCounts.values()].reduce((sum, count) => sum + count, 0));
     const flapStrength = Math.max(0, Math.min(1.5, windSpeed / 18 * 0.55 + kiteSpeed / 28 * 0.45));
+
+    // Every airborne kite model contributes its own shaped paper/flutter layer.
+    for (const [modelId, voice] of Object.entries(this.kiteFlutterVoices || {})) {
+      const count = activeModelCounts.get(modelId) || 0;
+      const modelLevel = count > 0
+        ? Math.min(0.075, (0.012 + windSpeed * 0.0008 + kiteSpeed * 0.0013)
+          * voice.profile.volume * Math.min(1.35, count) / Math.sqrt(activeKiteCount))
+        : 0.0001;
+      voice.filter.frequency.setTargetAtTime(
+        (voice.profile.tapFilter * 0.72 + Math.min(700, windSpeed * 24 + kiteSpeed * 18))
+          * voice.profile.airTone,
+        now,
+        0.13
+      );
+      voice.gain.gain.setTargetAtTime(modelLevel, now, 0.16);
+    }
+
     if (this.flutterFilter && this.flutterGain) {
+      // Soft shared air bed beneath the distinct model layers.
       const flutterLevel = hasAirborneKites
-        ? Math.min(0.16, (0.009 + windSpeed * 0.0011 + kiteSpeed * 0.0025) * kiteProfile.volume)
-        : 0.006;
+        ? Math.min(0.035, (0.003 + windSpeed * 0.00025 + kiteSpeed * 0.00045) * kiteProfile.volume)
+        : 0.0008;
       this.flutterFilter.frequency.setTargetAtTime(
         (760 + Math.min(1450, kiteSpeed * 38) * kiteProfile.rate) * kiteProfile.airTone,
         now,
