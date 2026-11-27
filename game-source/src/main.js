@@ -1275,9 +1275,13 @@ class Pipa3DGame {
           this.sound.playSocada(0.85);
           this._flashDeckBtn('act-disque-r');
         } else if (code === 'KeyG' && !this.characterMode) {
-          if (this.playerKite.triggerSpin(Math.sign(this.padSteer) || (Math.sign(this.playerKite.noseAngle) || 1))) {
+          const direction = this.padSteer
+            || (this.keys['KeyA'] || this.keys['ArrowLeft'] ? -1 : 0)
+            || (this.keys['KeyD'] || this.keys['ArrowRight'] ? 1 : 0)
+            || (Math.sign(this.playerKite.directionTarget) || 1);
+          if (this.playerKite.triggerTurn(direction)) {
             this.sound.playSocada(0.9);
-            this._flashDeckBtn('act-spin');
+            this._flashDeckBtn(direction < 0 ? 'act-turn-left' : 'act-turn-right');
           }
         } else if (code === 'KeyF' && !this.characterMode) {
           if (this.playerKite.triggerRetao()) {
