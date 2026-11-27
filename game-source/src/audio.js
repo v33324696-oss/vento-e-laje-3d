@@ -275,9 +275,10 @@ export class SoundEngine {
         airTone: mix.airTone + profile.airTone / activeProfiles.length
       }), { rate: 0, volume: 0, tapTone: 0, tapFilter: 0, tapDuration: 0, airTone: 0 })
       : (KITE_SOUND_PROFILES[kiteModelId] || KITE_SOUND_PROFILES.murcha);
+    const hasAirborneKites = kiteActive || activeProfiles.length > 0;
     const flapStrength = Math.max(0, Math.min(1.5, windSpeed / 18 * 0.55 + kiteSpeed / 28 * 0.45));
     if (this.flutterFilter && this.flutterGain) {
-      const flutterLevel = kiteActive
+      const flutterLevel = hasAirborneKites
         ? Math.min(0.16, (0.009 + windSpeed * 0.0011 + kiteSpeed * 0.0025) * kiteProfile.volume)
         : 0.006;
       this.flutterFilter.frequency.setTargetAtTime(
@@ -290,7 +291,7 @@ export class SoundEngine {
 
     // CC0 canvas/paper foley plays in short bursts instead of a harsh constant loop.
     this.externalFlapTimer -= dt;
-    if (kiteActive && flapStrength > 0.12 && this.externalFlapTimer <= 0) {
+    if (hasAirborneKites && flapStrength > 0.12 && this.externalFlapTimer <= 0) {
       const played = this._playReference(
         'kiteFlap',
         Math.min(0.72, (0.38 + flapStrength * 0.18) * kiteProfile.volume),
