@@ -500,7 +500,7 @@ export class KiteEntity {
     // 5. Update 3D Kite Visual, Rabiola & Catenary String
     this._updateOrientation(this.localWind);
     const aeroLoad = Math.min(1.2, 0.16 + Math.min(0.68, this.aeroDynamicPressure * 0.007) + this.tension * 0.28 + this.socadaBoost * 0.4 - (this.stalled ? 0.10 : 0));
-    const structural = calculateStructuralResponse(this.aeroDynamicPressure, spec.id);
+    const structural = calculateStructuralResponse(this.aeroDynamicPressure, spec.id, this.condition ?? 100);
 
     this.visual.update({
       position: this.position,
