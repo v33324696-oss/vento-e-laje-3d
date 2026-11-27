@@ -1503,6 +1503,7 @@ class Pipa3DGame {
       session.reelProgress = Math.min(1, session.reelProgress + dt * 0.34);
     }
     session.kite.recoveryProgress = session.reelProgress;
+    session.kite.recoveryPulling = pulling;
     _recoveryTarget.set(0.48, 1.54, -0.62)
       .applyEuler(this.world.playerAvatar.rotation)
       .add(this.world.playerAvatar.position);
