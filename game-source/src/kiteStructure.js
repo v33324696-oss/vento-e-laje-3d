@@ -21,20 +21,33 @@ export function calculateStructuralResponse(dynamicPressure, modelId = 'murcha')
 
 // Elastic tether response: the line can stretch a little and damps a sudden
 // pull instead of snapping the kite to a perfect sphere every frame.
+export function calculateWinchResponse(radialVelocity, reelSpeed, dt, lineType = {}) {
+  const step = clamp(Number(dt) || 0.016, 0.001, 0.04);
+  const responseRate = clamp(lineType.pullResponse ?? 4.8, 2.8, 7.2);
+  const targetRadialSpeed = reelSpeed < 0
+    ? Math.max(-8.5, reelSpeed * 0.92)
+    : 0;
+  const blend = 1 - Math.exp(-responseRate * step);
+  const velocityChange = radialVelocity > targetRadialSpeed
+    ? (targetRadialSpeed - radialVelocity) * blend
+    : 0;
+  return { targetRadialSpeed, velocityChange, blend };
+}
+
 export function calculateCableResponse(extension, radialVelocity, lineType = {}) {
   const stretch = Math.max(0, Number(extension) || 0);
   const outwardSpeed = Math.max(0, Number(radialVelocity) || 0);
   const elasticity = clamp(lineType.elasticity ?? 0.03, 0.005, 0.09);
   const damping = clamp(lineType.damping ?? 0.82, 0.35, 1.2);
   const stiffness = 38 + (0.09 - elasticity) * 310;
-  const maxStretch = 0.06 + elasticity * 2.0;
-  const positionCorrection = Math.max(0, stretch - maxStretch) * 0.82;
+  const maxStretch = 0.025 + elasticity * 0.8;
+  const positionCorrection = Math.max(0, stretch - maxStretch);
   const radialImpulse = clamp(
-    stretch * stiffness * 0.025 + outwardSpeed * damping * 0.42,
+    stretch * stiffness * 0.012 + outwardSpeed * damping * 0.24,
     0,
-    4.5
+    2.4
   );
-  const tension = clamp(stretch * (2.1 + stiffness * 0.025) + outwardSpeed * 0.10, 0, 1);
+  const tension = clamp(stretch * (1.8 + stiffness * 0.018) + outwardSpeed * 0.075, 0, 1);
   return { elasticity, stiffness, maxStretch, positionCorrection, radialImpulse, tension };
 }
 
