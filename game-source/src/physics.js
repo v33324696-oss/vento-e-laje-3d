@@ -351,7 +351,7 @@ export class KiteEntity {
     this.reelSpeed = 0;
 
     if (controls.pull) {
-      this.reelSpeed = -7.2 * spec.speedMult;
+      this.reelSpeed = -12.5 * spec.speedMult;
       this.lineLength = Math.max(this.minLine, this.lineLength + this.reelSpeed * stepDt);
       targetTension = 0.66;
     } else if (controls.quickRelease) {
@@ -375,8 +375,8 @@ export class KiteEntity {
     if (Math.abs(steer) > 0.04) {
       // The nose turns at a controllable rate; steering also banks the wing
       // below, so input changes the actual lift direction instead of only its look.
-      const turnRate = 1.42 * spec.turnMult * (1 + (1 - tailRatio) * 0.42);
-      this.angularVel += (steer * turnRate - this.angularVel) * Math.min(1, stepDt * 8.5);
+      const turnRate = 3.15 * spec.turnMult * (1 + (1 - tailRatio) * 0.28);
+      this.angularVel += (steer * turnRate - this.angularVel) * Math.min(1, stepDt * 24);
     } else if ((controls.release || controls.quickRelease) && this.socadaBoost < 0.15) {
       const spinTarget = spec.spinRate * (controls.quickRelease ? 0.78 : 0.42);
       this.angularVel += (spinTarget - this.angularVel) * Math.min(1, stepDt * 5.2);
@@ -409,7 +409,7 @@ export class KiteEntity {
       0.07,
       0.82
     );
-    this.angleOfAttack += (targetAoA - this.angleOfAttack) * Math.min(1, stepDt * 3.8);
+    this.angleOfAttack += (targetAoA - this.angleOfAttack) * Math.min(1, stepDt * 11.5);
     const bankLimit = tailRatio < 0.45 ? 0.48 : 0.72;
     const targetBank = THREE.MathUtils.clamp(
       steer * bankLimit + this.angularVel * 0.018
@@ -417,7 +417,7 @@ export class KiteEntity {
       -bankLimit,
       bankLimit
     );
-    this.bankAngle += (targetBank - this.bankAngle) * Math.min(1, stepDt * 6.2);
+    this.bankAngle += (targetBank - this.bankAngle) * Math.min(1, stepDt * 17);
     bankSpanForSteering(_tRight, _airRelative, this.bankAngle, _bankedSpan);
 
     const aero = calculateAerodynamicForces({
@@ -434,6 +434,9 @@ export class KiteEntity {
     // Gravity is in game-scale units. Lift and drag are quadratic in apparent
     // wind speed; steering changes the kite attitude, not a preset target speed.
     _DesiredVel.set(aero.fx, aero.fy - 2.45, aero.fz);
+    // Immediate pilot authority: steering adds a bounded lateral acceleration
+    // while aerodynamic banking and nose rotation build underneath it.
+    _DesiredVel.addScaledVector(_tRight, steer * (5.8 + Math.min(2.2, apparentSpeed * 0.12)));
 
     // Hand inputs remain impulses layered on top of the aerodynamic flight.
     _DesiredVel.addScaledVector(_noseDir, this.socadaBoost * 8.0 + this.disbicarBoost * 4.0 + (controls.pull ? 0.3 : 0));
@@ -447,7 +450,7 @@ export class KiteEntity {
     // Integrate acceleration. Aerodynamic drag naturally damps motion relative
     // to the changing air mass instead of steering toward an artificial velocity.
     this.velocity.addScaledVector(_DesiredVel, stepDt);
-    this.velocity.multiplyScalar(Math.exp(-0.035 * stepDt));
+    this.velocity.multiplyScalar(Math.exp(-0.018 * stepDt));
     this.position.addScaledVector(this.velocity, stepDt);
 
     // 4. Keep kite in forward sky arena & enforce spherical tether constraint
