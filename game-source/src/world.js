@@ -106,6 +106,8 @@ export class GameWorld {
     this.clouds = [];
     this.birds = [];
     this.swayingTrees = [];
+    // The rooftop wind streamer is built immediately in _buildPlayerLaje().
+    this.windRibbonNodes = [];
     this.ambientPeople = [];
     this.ambientVehicles = [];
     this.ambientDogs = [];
