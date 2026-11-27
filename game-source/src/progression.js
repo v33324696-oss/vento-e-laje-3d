@@ -15,6 +15,20 @@ const MISSION_TEMPLATES = [
   { id: 'tail_hunter', title: 'Corta-rabiola', description: 'Corte 2 rabiolas', event: 'tailCut', target: 2, xp: 120, coins: 90 }
 ];
 
+const DAILY_MISSION_TEMPLATES = [
+  { id: 'daily_cut', title: 'Acerte a linha', description: 'Faça 3 cortes hoje', event: 'cut', target: 3, xp: 90, coins: 55 },
+  { id: 'daily_catch', title: 'Mão de ouro', description: 'Resgate 2 pipas avoadas', event: 'catch', target: 2, xp: 75, coins: 45 },
+  { id: 'daily_tail', title: 'Rabiola na mira', description: 'Corte 2 rabiolas hoje', event: 'tailCut', target: 2, xp: 55, coins: 35 }
+];
+const localDayKey = () => {
+  const date = new Date();
+  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
+};
+const createDailyMissionState = () => ({
+  date: localDayKey(),
+  missions: DAILY_MISSION_TEMPLATES.map((mission) => ({ id: mission.id, progress: 0, claimed: false }))
+});
+
 const EVENT_REWARDS = {
   cut: { xp: 55, coins: 22, stat: 'cuts' },
   catch: { xp: 35, coins: 16, stat: 'catches' },
@@ -42,7 +56,8 @@ function createDefaultProfile() {
     craftLog: [],
     rivalries: [],
     reputation: Object.fromEntries(NEIGHBORHOOD_IDS.map((id) => [id, 0])),
-    missions: MISSION_TEMPLATES.map((mission) => ({ id: mission.id, progress: 0, claimed: false }))
+    missions: MISSION_TEMPLATES.map((mission) => ({ id: mission.id, progress: 0, claimed: false })),
+    daily: createDailyMissionState()
   };
 }
 
@@ -52,6 +67,8 @@ function normalizeProfile(value) {
   const n = (v, fallback, max = 1_000_000) => Number.isFinite(Number(v))
     ? Math.max(0, Math.min(max, Math.floor(Number(v)))) : fallback;
   const savedMissions = new Map(Array.isArray(value.missions) ? value.missions.map((m) => [m.id, m]) : []);
+  const dailyDate = value.daily?.date === localDayKey() ? value.daily.date : '';
+  const savedDailyMissions = new Map(Array.isArray(value.daily?.missions) ? value.daily.missions.map((m) => [m.id, m]) : []);
   return {
     ...base,
     nickname: typeof value.nickname === 'string' ? value.nickname.trim().slice(0, 18) || 'Pipeiro' : base.nickname,
@@ -108,7 +125,14 @@ function normalizeProfile(value) {
         progress: n(saved.progress, 0, mission.target),
         claimed: saved.claimed === true
       };
-    })
+    }),
+    daily: dailyDate ? {
+      date: dailyDate,
+      missions: DAILY_MISSION_TEMPLATES.map((mission) => {
+        const saved = savedDailyMissions.get(mission.id) || {};
+        return { id: mission.id, progress: n(saved.progress, 0, mission.target), claimed: saved.claimed === true };
+      })
+    } : createDailyMissionState()
   };
 }
 
@@ -122,6 +146,14 @@ export class ProgressionStore {
     } catch {
       this.profile = createDefaultProfile();
     }
+    this._refreshDailyMissions();
+  }
+
+  _refreshDailyMissions() {
+    if (this.profile.daily?.date === localDayKey()) return false;
+    this.profile.daily = createDailyMissionState();
+    this.save();
+    return true;
   }
 
   get xpForNextLevel() {
@@ -160,8 +192,9 @@ export class ProgressionStore {
 
   record(event, amount = 1) {
     const reward = EVENT_REWARDS[event];
-    if (!reward) return { xpEarned: 0, coinsEarned: 0, levelsGained: 0, completedMissions: [] };
+    if (!reward) return { xpEarned: 0, coinsEarned: 0, levelsGained: 0, completedMissions: [], completedDailyMissions: [] };
     const count = Math.max(1, Math.min(20, Math.floor(amount || 1)));
+    this._refreshDailyMissions();
     let xpEarned = reward.xp * count;
     let coinsEarned = reward.coins * count;
     this.profile.stats[reward.stat] += count;
@@ -179,6 +212,19 @@ export class ProgressionStore {
       }
     }
 
+    const completedDailyMissions = [];
+    for (const mission of DAILY_MISSION_TEMPLATES.filter((item) => item.event === event)) {
+      const progress = this.profile.daily.missions.find((item) => item.id === mission.id);
+      if (!progress || progress.claimed) continue;
+      progress.progress = Math.min(mission.target, progress.progress + count);
+      if (progress.progress >= mission.target) {
+        progress.claimed = true;
+        xpEarned += mission.xp;
+        coinsEarned += mission.coins;
+        completedDailyMissions.push(mission.title);
+      }
+    }
+
     this.profile.xp += xpEarned;
     this.profile.coins += coinsEarned;
     let levelsGained = 0;
@@ -190,7 +236,7 @@ export class ProgressionStore {
       coinsEarned += 75;
     }
     this.save();
-    return { xpEarned, coinsEarned, levelsGained, completedMissions };
+    return { xpEarned, coinsEarned, levelsGained, completedMissions, completedDailyMissions };
   }
 
   getKiteCondition(modelId) {
@@ -414,6 +460,14 @@ export class ProgressionStore {
   getMissions() {
     return MISSION_TEMPLATES.map((mission) => {
       const progress = this.profile.missions.find((item) => item.id === mission.id) || { progress: 0, claimed: false };
+      return { ...mission, progress: progress.progress, claimed: progress.claimed };
+    });
+  }
+
+  getDailyMissions() {
+    this._refreshDailyMissions();
+    return DAILY_MISSION_TEMPLATES.map((mission) => {
+      const progress = this.profile.daily.missions.find((item) => item.id === mission.id) || { progress: 0, claimed: false };
       return { ...mission, progress: progress.progress, claimed: progress.claimed };
     });
   }

@@ -1662,3 +1662,5 @@ button { touch-action: manipulation; }
   .garage-action-row button { width:100%; }
   .profile-reputation-item { grid-template-columns:1fr; }
 }
+
+.daily-mission-heading { margin: 17px 0 8px; }

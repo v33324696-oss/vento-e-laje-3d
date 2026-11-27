@@ -1303,10 +1303,24 @@ class Pipa3DGame {
     set('profile-coins', profile.coins.toLocaleString('pt-BR'));
     set('profile-total-cuts', profile.stats.cuts.toLocaleString('pt-BR'));
     set('profile-total-catches', profile.stats.catches.toLocaleString('pt-BR'));
+    set('profile-flight-time', `${Math.floor(profile.stats.flightSeconds / 60)} min`);
     const onlineName = document.getElementById('online-name');
     if (onlineName && !onlineName.matches(':focus')) onlineName.value = profile.nickname;
     const xpFill = document.getElementById('profile-xp-fill');
     if (xpFill) xpFill.style.width = `${Math.min(100, profile.xp / nextXp * 100)}%`;
+    const dailyList = document.getElementById('daily-mission-list');
+    if (dailyList) {
+      dailyList.innerHTML = this.progression.getDailyMissions().map((mission) => {
+        const pct = Math.min(100, mission.progress / mission.target * 100);
+        const status = mission.claimed ? 'CONCLUÍDA' : `${mission.progress}/${mission.target}`;
+        return `<article class="mission-item ${mission.claimed ? 'done' : ''}">
+          <div class="mission-top"><strong>${mission.title}</strong><span class="mission-reward">+${mission.coins} 🪙</span></div>
+          <p>${mission.description}</p>
+          <div class="mission-progress-row"><span>${status}</span><span>+${mission.xp} XP</span></div>
+          <div class="mission-progress-track"><div class="mission-progress-fill" style="width:${pct}%"></div></div>
+        </article>`;
+      }).join('');
+    }
     const reputationList = document.getElementById('profile-neighborhood-reputation');
     if (reputationList) reputationList.innerHTML = this.progression.getNeighborhoods().map((item) => `
       <article class="profile-reputation-item"><div><strong>${item.name}</strong><small>${item.title} · ${item.points} REP</small></div><div class="profile-reputation-track"><i style="width:${Math.min(100, item.progress)}%"></i></div></article>`
@@ -2855,9 +2869,11 @@ class Pipa3DGame {
     });
 
     if (this.started) {
+      this.progression.profile.stats.flightSeconds += dt;
       this.hudUpdateAccumulator += dt;
       if (this.hudUpdateAccumulator >= 0.1) {
         this._updateHUD();
+        if (Math.floor(this.elapsedTime) % 10 === 0) this.progression.save();
         this.hudUpdateAccumulator %= 0.1;
       }
     }

@@ -132,3 +132,31 @@ test('kite crafting validates materials, charges the correct price and saves the
   assert.equal(loaded.profile.stats.craftedKites, 1);
   assert.equal(loaded.profile.craftLog[0].frame, 'reforcada');
 });
+
+
+test('daily challenges progress, auto-reward and persist with the career profile', () => {
+  const storage = new MemoryStorage();
+  const store = new ProgressionStore(storage);
+  const initial = store.getDailyMissions();
+  assert.equal(initial.length, 3);
+  assert.ok(initial.every((mission) => mission.progress === 0 && !mission.claimed));
+
+  store.record('cut', 3);
+  const dailyCut = store.getDailyMissions().find((mission) => mission.id === 'daily_cut');
+  assert.equal(dailyCut.progress, 3);
+  assert.equal(dailyCut.claimed, true);
+
+  const loaded = new ProgressionStore(storage);
+  assert.equal(loaded.getDailyMissions().find((mission) => mission.id === 'daily_cut').claimed, true);
+});
+
+test('daily challenges refresh when stored local day is no longer current', () => {
+  const storage = new MemoryStorage();
+  const store = new ProgressionStore(storage);
+  store.record('catch', 2);
+  store.profile.daily.date = '2000-01-01';
+  store.save();
+  const refreshed = new ProgressionStore(storage);
+  assert.notEqual(refreshed.profile.daily.date, '2000-01-01');
+  assert.equal(refreshed.getDailyMissions().find((mission) => mission.id === 'daily_catch').progress, 0);
+});
