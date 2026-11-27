@@ -1,6 +1,27 @@
-// Procedural Realistic Web Audio Engine for Pipa 3D
-// Synthesizes wind rush, silk-paper snap (socada), wooden carretilha spin,
-// line-crossing sizzle (relo), string snap, and rooftop whistles.
+// Procedural Realistic Web Audio Engine for Pipa 3D.
+// Licensed CC0 foley references add real-world paper, reel and line details.
+const KITE_SOUND_PROFILES = Object.freeze({
+  murcha:    { rate: 1.00, volume: 0.98 },
+  raia:      { rate: 1.13, volume: 0.86 },
+  latao:     { rate: 0.84, volume: 1.18 },
+  peixinho:  { rate: 1.07, volume: 0.91 },
+  papagaio:  { rate: 0.95, volume: 0.98 },
+  delta:     { rate: 1.09, volume: 0.94 },
+  estrela:   { rate: 0.88, volume: 1.08 },
+  hexagonal: { rate: 0.90, volume: 1.13 },
+  peixao:    { rate: 0.82, volume: 1.22 },
+  capucheta: { rate: 1.19, volume: 0.79 },
+  morcego:   { rate: 1.05, volume: 0.96 },
+  quadrada:  { rate: 0.93, volume: 0.95 },
+  rokkaku:   { rate: 0.89, volume: 1.06 }
+});
+
+const FOLEY_URLS = Object.freeze({
+  kiteFlap: 'https://sfxmint.com/dl/paper-fabric-fabric-39.mp3',
+  reelWinding: 'https://sfxmint.com/dl/fishing-reel-02.mp3',
+  lineSqueal: 'https://sfxmint.com/dl/fishing-reel-04.mp3',
+  lineSnap: 'https://sfxmint.com/dl/fishing-reel-03.mp3'
+});
 
 export class SoundEngine {
   constructor() {
@@ -21,6 +42,10 @@ export class SoundEngine {
 
     this.lastTickTime = 0;
     this.spoolPhase = 0;
+    this.referenceAudio = null;
+    this.externalFlapTimer = 0.7;
+    this.externalSpoolTimer = 0.3;
+    this.reloWasActive = false;
   }
 
   init() {
@@ -142,9 +167,50 @@ export class SoundEngine {
       this.flutterGain.connect(this.masterGain);
       paperNoise.start();
 
+      this._initReferenceAudio();
       this.initialized = true;
     } catch (e) {
       // Ignore audio errors in headless environments
+    }
+  }
+
+  _initReferenceAudio() {
+    if (this.referenceAudio || typeof window === 'undefined' || typeof window.Audio !== 'function') return;
+    const create = (url) => {
+      const audio = new window.Audio(url);
+      audio.preload = 'auto';
+      audio.volume = 0;
+      audio.loop = false;
+      return audio;
+    };
+    this.referenceAudio = {
+      kiteFlap: create(FOLEY_URLS.kiteFlap),
+      reelWinding: create(FOLEY_URLS.reelWinding),
+      lineSqueal: create(FOLEY_URLS.lineSqueal),
+      lineSnap: create(FOLEY_URLS.lineSnap)
+    };
+  }
+
+  _playReference(name, volume = 0.35, playbackRate = 1) {
+    const audio = this.referenceAudio?.[name];
+    if (!this.enabled || !audio || !audio.paused) return false;
+    try {
+      audio.currentTime = 0;
+      audio.volume = Math.max(0, Math.min(1, volume));
+      audio.playbackRate = Math.max(0.65, Math.min(1.45, playbackRate));
+      const promise = audio.play();
+      if (promise?.catch) promise.catch(() => {});
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  _pauseReferenceAudio() {
+    if (!this.referenceAudio) return;
+    for (const audio of Object.values(this.referenceAudio)) {
+      audio.pause();
+      try { audio.currentTime = 0; } catch {}
     }
   }
 
@@ -154,10 +220,21 @@ export class SoundEngine {
     if (this.masterGain && this.ctx) {
       this.masterGain.gain.setTargetAtTime(this.enabled ? 0.75 : 0.0, this.ctx.currentTime, 0.04);
     }
+    if (!this.enabled) this._pauseReferenceAudio();
     return this.enabled;
   }
 
-  updateContinuous({ windSpeed = 8, kiteSpeed = 5, spoolSpeed = 0, reloIntensity = 0, reloSpeed = 10, dt = 0.016 }) {
+  updateContinuous({
+    windSpeed = 8,
+    kiteSpeed = 5,
+    spoolSpeed = 0,
+    reloIntensity = 0,
+    reloSpeed = 10,
+    kiteModelId = 'murcha',
+    kiteActive = true,
+    lineTension = 0.5,
+    dt = 0.016
+  }) {
     if (!this.initialized || !this.ctx || !this.enabled) return;
     const now = this.ctx.currentTime;
 
@@ -179,12 +256,53 @@ export class SoundEngine {
       this.playWoodTick(0.03 + spoolNorm * 0.05);
     }
 
-    // Soft papery flutter rises as the kite pulls against the breeze.
+    // Kite-specific paper flutter. Every model has its own pitch and loudness
+    // profile, while the sound source remains the same physical paper-in-wind foley.
+    const kiteProfile = KITE_SOUND_PROFILES[kiteModelId] || KITE_SOUND_PROFILES.murcha;
+    const flapStrength = Math.max(0, Math.min(1.5, windSpeed / 18 * 0.55 + kiteSpeed / 28 * 0.45));
     if (this.flutterFilter && this.flutterGain) {
-      const flutterLevel = Math.min(0.16, 0.012 + windSpeed * 0.0016 + kiteSpeed * 0.0032);
-      this.flutterFilter.frequency.setTargetAtTime(780 + Math.min(1500, kiteSpeed * 42), now, 0.12);
+      const flutterLevel = kiteActive
+        ? Math.min(0.16, (0.009 + windSpeed * 0.0011 + kiteSpeed * 0.0025) * kiteProfile.volume)
+        : 0.006;
+      this.flutterFilter.frequency.setTargetAtTime(
+        760 + Math.min(1450, kiteSpeed * 38) * kiteProfile.rate,
+        now,
+        0.12
+      );
       this.flutterGain.gain.setTargetAtTime(flutterLevel, now, 0.16);
     }
+
+    // CC0 canvas/paper foley plays in short bursts instead of a harsh constant loop.
+    this.externalFlapTimer -= dt;
+    if (kiteActive && flapStrength > 0.12 && this.externalFlapTimer <= 0) {
+      const played = this._playReference(
+        'kiteFlap',
+        Math.min(0.72, (0.38 + flapStrength * 0.18) * kiteProfile.volume),
+        kiteProfile.rate * (0.9 + Math.min(0.35, windSpeed / 55))
+      );
+      this.externalFlapTimer = played
+        ? 3.1 + Math.random() * 1.4
+        : 0.65;
+    } else if (!kiteActive) {
+      this.externalFlapTimer = Math.min(this.externalFlapTimer, 0.7);
+    }
+
+    // Real winding-reel clicks accompany sustained line movement.
+    this.externalSpoolTimer -= dt;
+    if (spoolNorm > 0.16 && this.externalSpoolTimer <= 0) {
+      const played = this._playReference('reelWinding', 0.28 + spoolNorm * 0.24, 0.88 + spoolNorm * 0.2);
+      this.externalSpoolTimer = played ? 2.25 : 0.55;
+    } else if (spoolNorm <= 0.16) {
+      this.externalSpoolTimer = Math.min(this.externalSpoolTimer, 0.3);
+    }
+
+    // The squealing-line sample accents the start of each RELO; the procedural
+    // friction layer below sustains the sound while lines remain crossed.
+    const reloActive = reloIntensity > 0.12;
+    if (reloActive && !this.reloWasActive) {
+      this._playReference('lineSqueal', 0.3 + Math.min(0.22, reloIntensity * 0.16), 0.92 + Math.min(0.28, reloSpeed / 70));
+    }
+    this.reloWasActive = reloActive;
 
     // Relo sizzle
     if (reloIntensity > 0.01) {
@@ -265,6 +383,7 @@ export class SoundEngine {
     if (!this.initialized || !this.ctx || !this.enabled) return;
 
     const now = this.ctx.currentTime;
+    this._playReference('lineSnap', 0.62, 0.96);
 
     // Sharp taut string snap
     const osc = this.ctx.createOscillator();
