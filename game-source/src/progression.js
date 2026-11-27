@@ -1,4 +1,9 @@
-const STORAGE_KEY = 'vento-laje-profile-v1';
+const STORAGE_KEY = 'vento-laje-profile-v2';
+
+const KITE_IDS = [
+  'murcha', 'raia', 'latao', 'peixinho', 'papagaio', 'delta',
+  'estrela', 'hexagonal', 'peixao', 'capucheta', 'morcego', 'quadrada', 'rokkaku'
+];
 
 const MISSION_TEMPLATES = [
   { id: 'first_cuts', title: 'Dono do céu', description: 'Faça 5 cortes', event: 'cut', target: 5, xp: 180, coins: 120 },
@@ -14,13 +19,14 @@ const EVENT_REWARDS = {
 
 function createDefaultProfile() {
   return {
-    version: 1,
+    version: 2,
     nickname: 'Pipeiro',
     level: 1,
     xp: 0,
     coins: 250,
     ownedLines: [],
-    stats: { cuts: 0, catches: 0, tailCuts: 0, bestCombo: 1, games: 0 },
+    stats: { cuts: 0, catches: 0, tailCuts: 0, bestCombo: 1, games: 0, repairs: 0, flightSeconds: 0 },
+    house: { level: 1, garageSlots: 3, visits: 0, ownedKites: ['murcha'], kiteCondition: Object.fromEntries(KITE_IDS.map((id) => [id, 100])) },
     missions: MISSION_TEMPLATES.map((mission) => ({ id: mission.id, progress: 0, claimed: false }))
   };
 }
@@ -43,7 +49,16 @@ function normalizeProfile(value) {
       catches: n(value.stats?.catches, 0),
       tailCuts: n(value.stats?.tailCuts, 0),
       bestCombo: Math.max(1, n(value.stats?.bestCombo, 1, 999)),
-      games: n(value.stats?.games, 0)
+      games: n(value.stats?.games, 0),
+      repairs: n(value.stats?.repairs, 0),
+      flightSeconds: n(value.stats?.flightSeconds, 0)
+    },
+    house: {
+      level: Math.max(1, Math.min(3, n(value.house?.level, 1, 3))),
+      garageSlots: Math.max(3, Math.min(7, n(value.house?.garageSlots, 3, 7))),
+      visits: n(value.house?.visits, 0),
+      ownedKites: [...new Set(['murcha', ...(Array.isArray(value.house?.ownedKites) ? value.house.ownedKites.filter((id) => KITE_IDS.includes(id)) : [])])],
+      kiteCondition: Object.fromEntries(KITE_IDS.map((id) => [id, Math.max(0, Math.min(100, Number.isFinite(Number(value.house?.kiteCondition?.[id])) ? Number(value.house.kiteCondition[id]) : 100))]))
     },
     missions: MISSION_TEMPLATES.map((mission) => {
       const saved = savedMissions.get(mission.id) || {};
@@ -135,6 +150,59 @@ export class ProgressionStore {
     }
     this.save();
     return { xpEarned, coinsEarned, levelsGained, completedMissions };
+  }
+
+  getKiteCondition(modelId) {
+    return Math.max(0, Math.min(100, this.profile.house.kiteCondition[modelId] ?? 100));
+  }
+
+  discoverKite(modelId) {
+    if (!KITE_IDS.includes(modelId)) return;
+    if (!this.profile.house.ownedKites.includes(modelId)) {
+      this.profile.house.ownedKites.push(modelId);
+      this.save();
+    }
+  }
+
+  damageKite(modelId, amount = 0.1) {
+    if (!KITE_IDS.includes(modelId)) return this.getKiteCondition(modelId);
+    this.discoverKite(modelId);
+    const wear = Math.max(0, Math.min(5, Number(amount) || 0));
+    this.profile.house.kiteCondition[modelId] = Math.max(0, this.getKiteCondition(modelId) - wear);
+    this.save();
+    return this.profile.house.kiteCondition[modelId];
+  }
+
+  repairKite(modelId) {
+    if (!KITE_IDS.includes(modelId)) return { ok: false, reason: 'Pipa não encontrada na garagem.' };
+    const condition = this.getKiteCondition(modelId);
+    if (condition >= 99.9) return { ok: true, repaired: false, cost: 0 };
+    const cost = Math.max(1, Math.ceil((100 - condition) * 2.4));
+    if (this.profile.coins < cost) return { ok: false, reason: `Faltam ${cost - this.profile.coins} moedas para o conserto.` };
+    this.profile.coins -= cost;
+    this.profile.house.kiteCondition[modelId] = 100;
+    this.profile.stats.repairs += 1;
+    this.save();
+    return { ok: true, repaired: true, cost };
+  }
+
+  visitGarage() {
+    this.profile.house.visits += 1;
+    this.save();
+  }
+
+  upgradeHouse() {
+    const level = this.profile.house.level;
+    if (level >= 3) return { ok: false, reason: 'Sua casa já está no nível máximo.' };
+    const requiredLevel = level === 1 ? 5 : 12;
+    const cost = level === 1 ? 850 : 1800;
+    if (this.profile.level < requiredLevel) return { ok: false, reason: `Alcance o nível ${requiredLevel} da carreira para ampliar a casa.` };
+    if (this.profile.coins < cost) return { ok: false, reason: `Faltam ${cost - this.profile.coins} moedas.` };
+    this.profile.coins -= cost;
+    this.profile.house.level += 1;
+    this.profile.house.garageSlots = Math.min(7, this.profile.house.garageSlots + 2);
+    this.save();
+    return { ok: true, cost, level: this.profile.house.level };
   }
 
   ownsLine(id) {
