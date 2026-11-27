@@ -5,16 +5,20 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 // Converts dynamic pressure into a bounded visual/structural strain value.
 // Coefficients are game-tuned because exact frame dimensions and materials
 // are not measured for every kite in the catalogue.
-export function calculateStructuralResponse(dynamicPressure, modelId = 'murcha') {
+export function calculateStructuralResponse(dynamicPressure, modelId = 'murcha', conditionPercent = 100) {
   const profile = getKiteAeroProfile(modelId);
   const pressure = Math.max(0, Number(dynamicPressure) || 0);
-  const rawStrain = pressure * profile.area / Math.max(0.35, profile.frameStrength) * 0.0036;
+  const condition = clamp(Number(conditionPercent) || 0, 0, 100);
+  const damageFactor = 1 + (100 - condition) * 0.008;
+  const rawStrain = pressure * profile.area / Math.max(0.35, profile.frameStrength) * 0.0036 * damageFactor;
   const strain = clamp(rawStrain, 0, 1.35);
   return {
     strain,
     paperBend: clamp(strain * profile.flexibility, 0, 1.2),
     frameBend: clamp(strain * profile.flexibility * 0.52, 0, 0.72),
     overload: clamp((strain - 0.88) / 0.47, 0, 1),
+    condition,
+    damageFactor,
     flutterRate: profile.flutterRate
   };
 }
