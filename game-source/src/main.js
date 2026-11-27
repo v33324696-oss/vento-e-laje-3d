@@ -595,6 +595,7 @@ class Pipa3DGame {
       lineDurability: this.playerKite.lineType.durability || 1,
       lineRecovery: this.playerKite.lineType.recovery || 0.45,
       lineDischargeSafe: this.playerKite.lineType.dischargeSafe === true,
+      windAlignment: this._getWindAlignment(this.playerKite),
       lineIntegrity: this.playerKite.lineIntegrity
     });
   }
@@ -730,6 +731,8 @@ class Pipa3DGame {
     set('profile-coins', profile.coins.toLocaleString('pt-BR'));
     set('profile-total-cuts', profile.stats.cuts.toLocaleString('pt-BR'));
     set('profile-total-catches', profile.stats.catches.toLocaleString('pt-BR'));
+    const onlineName = document.getElementById('online-name');
+    if (onlineName && !onlineName.matches(':focus')) onlineName.value = profile.nickname;
     const xpFill = document.getElementById('profile-xp-fill');
     if (xpFill) xpFill.style.width = `${Math.min(100, profile.xp / nextXp * 100)}%`;
     const list = document.getElementById('mission-list');
@@ -1385,6 +1388,14 @@ class Pipa3DGame {
     return alignment < -0.25 ? 1 : 0;
   }
 
+  _getWindAlignment(kite) {
+    const speed = Math.hypot(kite.velocity.x, kite.velocity.y, kite.velocity.z);
+    const windSpeed = this.windVec.length();
+    if (speed < 0.25 || windSpeed < 0.25) return 0.5;
+    const dot = (kite.velocity.x * this.windVec.x + kite.velocity.y * this.windVec.y + kite.velocity.z * this.windVec.z) / (speed * windSpeed);
+    return THREE.MathUtils.clamp((dot + 1) * 0.5, 0, 1);
+  }
+
   _computeCutAttackPower(attacker, uSelf, uEnemy, crossingQuality = 0, relativeSpeed = 0, defender = null) {
     const defenderExposure = defender && defender.reelSpeed > 5 && !defender.lineType.dischargeSafe
       ? THREE.MathUtils.clamp((defender.reelSpeed - 5) / 22, 0, 1)
@@ -1401,6 +1412,7 @@ class Pipa3DGame {
       largadaActive: attacker.largadaBoost > 0,
       largadaQuality: attacker.largadaQuality,
       linePower: attacker.lineType.cutPower * attacker.visual.spec.powerMult,
+      windAlignment: this._getWindAlignment(attacker),
       wrapQuality: THREE.MathUtils.clamp(attacker.reloContactTime / 0.42, 0, 1),
       rearAdvantage: defender ? this._getRearAdvantage(attacker, defender) : 0,
       defenderExposure,
