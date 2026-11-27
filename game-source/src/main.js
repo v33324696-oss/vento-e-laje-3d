@@ -208,6 +208,8 @@ class Pipa3DGame {
     this.playerKite.reelSpeed = 0;
     this.playerKite.lineLength = 18;
     this.playerKite.tension = 0.18;
+    this.playerKite.stringRopeReady = false;
+    this.playerKite.cableTension = 0;
     this.playerKite.lineIntegrity = 1;
     this.playerKite.inRelo = false;
     this.playerKite.reloContactTime = 0;
@@ -336,7 +338,8 @@ class Pipa3DGame {
       dt: 0.016
     });
     this.playerKite.visual.resetTailAt(this.playerKite.position);
-    this.playerKite._updateStringCurve(this.windVec, -1, 0);
+    this.playerKite.stringRopeReady = false;
+    this.playerKite._updateStringCurve(this.windVec, -1, 0, 0.016);
     this.playerKite.visual.setVisible(true);
     this.playerKite.lineMesh.visible = true;
 
@@ -2117,9 +2120,19 @@ class Pipa3DGame {
     const t = this.playerKite.tension;
     document.getElementById('bar-tension').style.width = `${Math.round(t * 100)}%`;
     const stateEl = document.getElementById('val-tension-state');
-    if (t < 0.28) stateEl.textContent = 'Bamba (Giro)';
-    else if (t > 0.78) stateEl.textContent = 'Esticada (Corte!)';
-    else stateEl.textContent = 'Firme';
+    if (this.playerKite.stalled) {
+      stateEl.textContent = 'Estolando — descarregue';
+      stateEl.style.color = '#fb7185';
+    } else if (t < 0.28) {
+      stateEl.textContent = 'Bamba (Giro)';
+      stateEl.style.color = '#f8fafc';
+    } else if (t > 0.78) {
+      stateEl.textContent = 'Esticada (Corte!)';
+      stateEl.style.color = '#facc15';
+    } else {
+      stateEl.textContent = 'Firme';
+      stateEl.style.color = '#f8fafc';
+    }
   }
 
   _animate() {
@@ -2136,7 +2149,8 @@ class Pipa3DGame {
     this.elapsedTime += dt;
     const elapsed = this.elapsedTime;
 
-    this._updateRabiolaRecovery(dt);
+    try {
+      this._updateRabiolaRecovery(dt);
 
     // 1. Update wind, scene and character exploration.
     this._updateWind(elapsed);
@@ -2273,6 +2287,16 @@ class Pipa3DGame {
       this._updateHUD();
     }
 
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (this.lastRuntimeError !== message) {
+        this.lastRuntimeError = message;
+        console.error('[Vento & Laje] erro na simulação; mantendo a cena 3D visível:', error);
+      }
+    }
+
+    // Keep drawing the world even if a gameplay subsystem throws. This makes a
+    // physics bug diagnosable without turning the entire play area into a blank screen.
     this.renderer.render(this.scene, this.camera);
   }
 }
