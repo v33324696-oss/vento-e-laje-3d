@@ -441,9 +441,19 @@ export class KiteEntity {
     this.aeroDynamicPressure = aero.dynamicPressure;
     this.stalled = aero.stalled;
 
-    // Gravity is in game-scale units. Lift and drag are quadratic in apparent
-    // wind speed; steering changes the kite attitude, not a preset target speed.
-    _DesiredVel.set(aero.fx, aero.fy - 2.45, aero.fz);
+    // Gravity is in game-scale units. In this simulation the lift vector can
+    // otherwise exceed gravity continuously at normal wind speeds, creating a
+    // runaway climb even with no pilot input. Let the wind support the kite,
+    // but reserve any positive climb for the player's actual steering/line
+    // commands below.
+    const gravity = 2.45;
+    const supportedVerticalAero = Math.min(aero.fy, gravity);
+    const upwardMotionDamping = Math.max(0, this.velocity.y) * 0.42;
+    _DesiredVel.set(
+      aero.fx,
+      supportedVerticalAero - gravity - upwardMotionDamping,
+      aero.fz
+    );
     // Immediate pilot authority: steering adds a bounded lateral acceleration
     // while aerodynamic banking and nose rotation build underneath it.
     // Steering is applied as a closed-loop lateral velocity command after integration.
