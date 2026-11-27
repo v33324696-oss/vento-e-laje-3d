@@ -263,4 +263,4 @@ export class Carretilha3D {
 
 const _camForward = new THREE.Vector3();
 const _camRight = new THREE.Vector3();
-const _camUp = new THREE.Vector3();
+const _camUp = new THREE.Vector3();,,,,,,,,,,,,,\n    durability: 0.8, recovery: 0.34\n    durability: 1.2, recovery: 0.64\n    durability: 1, recovery: 0.5\n    durability: 0.98, recovery: 0.5\n    durability: 1.1, recovery: 0.42\n    durability: 1.18, recovery: 0.58\n    durability: 0.92, recovery: 0.44\n    durability: 1.22, recovery: 0.7\n    durability: 1.12, recovery: 0.62\n    durability: 1, recovery: 0.52\n    durability: 0.94, recovery: 0.48\n    durability: 1.05, recovery: 0.55\n    durability: 0.78, recovery: 0.3
