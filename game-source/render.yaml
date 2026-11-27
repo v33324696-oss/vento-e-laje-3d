@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: vento-e-laje-3d
+    runtime: node
+    plan: free
+    region: ohio
+    buildCommand: npm ci --include=dev --no-audit --no-fund && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true

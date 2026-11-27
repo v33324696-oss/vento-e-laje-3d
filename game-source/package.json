@@ -1,0 +1,26 @@
+{
+  "name": "pipa-3d-realista",
+  "version": "1.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Jogo 3D realista de Pipa Brasileira — Vento, Laje, Carretilha e Combate Aéreo",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 5173",
+    "server": "node server.js",
+    "dev:all": "node run-dev.js",
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "three": "^0.187.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "vite": "^8.4.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="description" content="Vento & Laje 3D: simulador de pipas com mapas, oficina e partidas online para celular e computador." />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="/pipa.svg" />
+  <link rel="apple-touch-icon" href="/icons/pipa-192.png" />
+  <title>Vento &amp; Laje 3D — Simulador Realista de Pipa</title>
+  <link rel="stylesheet" href="./src/styles.css" />
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <!-- Top HUD Bar -->
+  <header id="hud-top" class="hud-hidden">
+    <div class="score-panel glass-card">
+      <div class="mode-badge" id="hud-mode-badge">FESTIVAL LIVRE</div>
+      <div class="stats-row">
+        <div class="stat-item">
+          <span class="stat-label">PONTOS</span>
+          <span class="stat-value accent-gold" id="stat-score">0</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+          <span class="stat-label">CORTES</span>
+          <span class="stat-value accent-rose" id="stat-cuts">0</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+          <span class="stat-label">APARADAS</span>
+          <span class="stat-value accent-emerald" id="stat-catches">0</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+          <span class="stat-label">COMBO</span>
+          <span class="stat-value" id="stat-combo">x1</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Center Proximity & Relo Alert -->
+    <div class="center-alerts">
+      <div id="event-banner" class="event-banner hidden">
+        <span class="event-tag" id="event-tag">MANDOU!</span>
+        <span class="event-text" id="event-text">Cortou na puxada!</span>
+      </div>
+
+      <div id="proximity-hud" class="proximity-card glass-card hidden">
+        <div class="prox-header">
+          <span id="prox-title">LINHA PRÓXIMA</span>
+          <span id="prox-dist">2.4m</span>
+        </div>
+        <div class="relo-meter-track">
+          <div id="relo-meter-player" class="relo-meter-fill player-fill" style="width: 50%"></div>
+        </div>
+        <div class="prox-hint" id="prox-hint">Sua linha pela FRENTE — Soca [Espaço] ou Descarrega [S]!</div>
+      </div>
+    </div>
+
+    <!-- Top Right Utility Controls -->
+    <div class="utility-bar">
+      <button id="btn-camera" class="hud-btn glass-card" title="Alternar Câmera (Tecla C)">
+        <span class="btn-icon">🎥</span>
+        <span id="label-camera">Câm: Laje</span>
+      </button>
+      <button id="btn-weather" class="hud-btn glass-card" title="Mudar Horário e Vento">
+        <span class="btn-icon">☀️</span>
+        <span id="label-weather">Tarde</span>
+      </button>
+      <button id="btn-explore" class="hud-btn glass-card" title="Controlar o personagem (Tecla V)">
+        <span class="btn-icon">🧍</span>
+        <span id="label-explore">Explorar</span>
+      </button>
+      <button id="btn-online" class="hud-btn glass-card" title="Abrir salas online">
+        <span class="btn-icon">🌐</span>
+        <span>Online</span>
+      </button>
+      <button id="btn-oficina" class="hud-btn glass-card accent-border" title="Personalizar Pipa e Linha (Tecla O)">
+        <span class="btn-icon">🪁</span>
+        <span>Oficina</span>
+      </button>
+      <button id="btn-mode" class="hud-btn glass-card" title="Trocar Modo de Jogo">
+        <span class="btn-icon">🏆</span>
+        <span>Modos</span>
+      </button>
+      <button id="btn-sound" class="hud-btn glass-card icon-only" title="Ativar/Desativar Som">
+        <span id="icon-sound">🔊</span>
+      </button>
+      <button id="btn-help" class="hud-btn glass-card icon-only" title="Mostrar/Ocultar Comandos (Tecla H)">
+        <span>?</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Relaunch Prompt when Player's Kite gets Cut -->
+  <div id="relaunch-overlay" class="relaunch-box hidden">
+    <div class="relaunch-card glass-card">
+      <div class="relaunch-title">✂️ SUA PIPA FOI CORTADA!</div>
+      <p class="relaunch-sub" id="relaunch-reason">Sua pipa foi embora boiando no vento...</p>
+      <button id="btn-relaunch" class="primary-cta">
+        🪁 EMPINAR NOVA PIPA DA LAJE <span class="key-pill">ESPAÇO</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Compact Controls Legend -->
+  <aside id="controls-guide" class="controls-guide glass-card hud-hidden">
+    <div class="guide-title">COMANDOS DO PIPEIRO</div>
+    <div class="guide-row"><kbd>Espaço</kbd> / <kbd>Clique</kbd> <span>Socar (Disparo no Bico)</span></div>
+    <div class="guide-row"><kbd>W</kbd> / <kbd>Segurar Clique</kbd> <span>Puxar / Recolher Linha</span></div>
+    <div class="guide-row"><kbd>S</kbd> / <kbd>Botão Dir.</kbd> <span>Dar linha; toque no início do cruzamento para tentar a largada</span></div>
+    <div class="guide-row"><kbd>RELO</kbd> <span>Ângulo e altura da entrada contam; entrar mal deixa sua linha em desvantagem</span></div>
+    <div class="guide-row"><kbd>A</kbd> <kbd>D</kbd> / <kbd>Setas</kbd> <span>Guiar Direção / Looping</span></div>
+    <div class="guide-row"><kbd>Q</kbd> / <kbd>E</kbd> <span>Disque Rápido (Corte)</span></div>
+    <div class="guide-row"><kbd>C</kbd> <span>Alternar Câmera 3D</span></div>
+    <div class="guide-row"><kbd>V</kbd> <span>Entrar / sair do modo personagem</span></div>
+    <div class="guide-row"><kbd>W A S D</kbd> <span>Andar pelo mapa no modo personagem</span></div>
+    <div class="guide-row"><kbd>E</kbd> <span>Escolher este local para empinar</span></div>
+  </aside>
+
+  <!-- Touch controller used while exploring the map on phones/tablets -->
+  <section id="touch-char-controls" class="touch-char-controls hidden" aria-label="Controles para andar pelo mapa">
+    <div class="touch-move-pad" aria-label="Direções">
+      <button type="button" data-move="up" aria-label="Andar para frente">▲</button>
+      <button type="button" data-move="left" aria-label="Andar para esquerda">◀</button>
+      <button type="button" data-move="down" aria-label="Andar para trás">▼</button>
+      <button type="button" data-move="right" aria-label="Andar para direita">▶</button>
+    </div>
+    <div class="touch-char-actions">
+      <button type="button" id="touch-sprint" class="touch-action-btn">CORRER</button>
+      <button type="button" id="touch-launch" class="touch-action-btn touch-launch-btn">🪁 EMPINAR AQUI</button>
+    </div>
+  </section>
+
+  <!-- Bottom Flight Telemetry & Tactile Action Deck -->
+  <footer id="hud-bottom" class="hud-hidden">
+    <!-- Left Telemetry + Steer Pad -->
+    <div class="bottom-left-cluster">
+      <div class="telemetry-card glass-card">
+        <div class="tele-top">
+          <div class="wind-indicator">
+            <div class="wind-compass">
+              <div id="wind-arrow" class="wind-arrow">↑</div>
+            </div>
+            <div>
+              <div class="tele-label">VENTO NA LAJE</div>
+              <div class="tele-val"><span id="val-wind">14</span> km/h</div>
+            </div>
+          </div>
+          <div class="line-stat">
+            <div class="tele-label">LINHA NO ALTO</div>
+            <div class="tele-val"><span id="val-line">58</span>m</div>
+          </div>
+          <div class="line-stat">
+            <div class="tele-label">RABIOLA</div>
+            <div class="tele-val" id="val-tail">100%</div>
+          </div>
+        </div>
+
+        <div class="tension-wrap">
+          <div class="tension-labels">
+            <span>TENSÃO DA LINHA</span>
+            <span id="val-tension-state">Firme</span>
+          </div>
+          <div class="tension-bar-bg">
+            <div id="bar-tension" class="tension-bar-fill" style="width: 48%"></div>
+          </div>
+        </div>
+
+        <!-- Optional Zen Mode Wind Slider -->
+        <div id="zen-wind-box" class="zen-wind-box hidden">
+          <label for="slider-zen-wind">Vento Zen: <span id="val-zen-wind">10</span> m/s</label>
+          <input type="range" id="slider-zen-wind" min="5" max="18" step="0.5" value="10" />
+        </div>
+      </div>
+
+      <!-- On-screen Left/Right Steer Buttons for Mouse/Touch convenience -->
+      <div class="steer-pad glass-card">
+        <button id="pad-left" class="steer-btn" aria-label="Guiar Esquerda">◀ A</button>
+        <span class="steer-caption">GUIAR BICO</span>
+        <button id="pad-right" class="steer-btn" aria-label="Guiar Direita">D ▶</button>
+      </div>
+    </div>
+
+    <!-- Right Tactile Carretilha Action Deck -->
+    <div class="action-deck">
+      <div class="disque-row">
+        <button id="act-disque-l" class="deck-btn secondary-btn">
+          <span>⚡ Disque Esq</span>
+          <kbd>Q</kbd>
+        </button>
+        <button id="act-disque-r" class="deck-btn secondary-btn">
+          <span>Disque Dir ⚡</span>
+          <kbd>E</kbd>
+        </button>
+      </div>
+      <div class="main-actions-row">
+        <button id="act-release" class="deck-btn release-btn">
+          <span class="act-title">DAR LINHA</span>
+          <span class="act-sub">Descarregar / Girar <kbd>S</kbd></span>
+        </button>
+        <button id="act-pull" class="deck-btn pull-btn">
+          <span class="act-title">PUXAR</span>
+          <span class="act-sub">Recolher <kbd>W</kbd></span>
+        </button>
+        <button id="act-socar" class="deck-btn socar-btn">
+          <span class="act-title">SOCAR!</span>
+          <span class="act-sub">Estalo / Disparo <kbd>Espaço</kbd></span>
+        </button>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Welcome / Mode Select Modal -->
+  <div id="welcome-modal" class="modal-backdrop">
+    <div class="welcome-card glass-card">
+      <div class="hero-pill">SIMULADOR 3D REALISTA • FÍSICA DE VENTO, CATENÁRIA &amp; RELO</div>
+      <h1 class="hero-title">VENTO &amp; LAJE <span>3D</span></h1>
+      <p class="hero-desc">
+        Suba na laje, gire a carretilha de madeira, sinta o estalo do papel de seda contra o sol e dispute o céu do bairro. Corte na puxada, na largada ou no cabresto — e apare pipas avoadas no alto!
+      </p>
+
+      <div class="mode-cards">
+        <button class="mode-card selected" data-mode="festival">
+          <div class="mc-icon">🪁</div>
+          <div class="mc-title">Festival na Quebrada</div>
+          <div class="mc-desc">Combate livre contra 6 pipeiros nas lajes vizinhas, relos e pipas avoadas para aparar.</div>
+        </button>
+        <button class="mode-card" data-mode="torneio">
+          <div class="mc-icon">🏆</div>
+          <div class="mc-title">Torneio Rei da Laje</div>
+          <div class="mc-desc">Rodadas progressivas com rajadas de vento e mestres da carretilha cada vez mais afiados.</div>
+        </button>
+        <button class="mode-card" data-mode="zen">
+          <div class="mc-icon">🌅</div>
+          <div class="mc-title">Voo Livre Zen</div>
+          <div class="mc-desc">Empine sem cortes, ajuste a velocidade do vento e pratique manobras ao pôr do sol.</div>
+        </button>
+      </div>
+
+      <section class="map-picker">
+        <div class="map-picker-heading">
+          <div class="sec-label">ESCOLHA ONDE VAI EMPINAR</div>
+          <span id="selected-map-label">Laje do Bairro</span>
+        </div>
+        <div id="map-options" class="map-option-grid">
+          <button class="map-option selected" data-map="laje"><span>🏘️</span><b>Laje do Bairro</b><small>Casas, telhados e lajes</small></button>
+          <button class="map-option" data-map="praia"><span>🏖️</span><b>Praia</b><small>Areia, mar e coqueiros</small></button>
+          <button class="map-option" data-map="parque"><span>🌳</span><b>Parque</b><small>Gramado, árvores e fonte</small></button>
+          <button class="map-option" data-map="campinho"><span>⚽</span><b>Campinho</b><small>Campo de futebol society</small></button>
+          <button class="map-option" data-map="morro"><span>🌄</span><b>Mirante do Morro</b><small>Casas coloridas e vista alta</small></button>
+        </div>
+      </section>
+
+      <div class="welcome-actions">
+        <button id="btn-open-oficina-start" class="secondary-cta">🎨 Oficina de Pipas</button>
+        <button id="btn-open-online-start" class="secondary-cta">🌐 Jogar Online</button>
+        <button id="btn-start-game" class="primary-cta">SUBIR PIPA AGORA ▶</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Oficina de Pipas (Customizer Drawer/Modal) -->
+  <div id="oficina-modal" class="modal-backdrop hidden">
+    <div class="oficina-card glass-card">
+      <div class="oficina-header">
+        <div>
+          <h2>🪁 OFICINA DA LAJE</h2>
+          <p>Personalize o modelo, recorte de seda, rabiola e carretilha em tempo real</p>
+        </div>
+        <button id="btn-close-oficina" class="close-btn">✕</button>
+      </div>
+
+      <div class="oficina-body">
+        <div class="oficina-section">
+          <label class="sec-label">MODELO DA PIPA</label>
+          <div id="opt-models" class="option-grid"></div>
+          <p id="model-desc-text" class="opt-hint"></p>
+        </div>
+
+        <div class="oficina-section">
+          <label class="sec-label">RECORTE DE PAPEL DE SEDA</label>
+          <div id="opt-patterns" class="pattern-grid"></div>
+        </div>
+
+        <div class="oficina-row-2col">
+          <div class="oficina-section">
+            <label class="sec-label">LINHA &amp; CARRETILHA</label>
+            <div id="opt-lines" class="option-stack"></div>
+          </div>
+
+          <div class="oficina-section">
+            <label class="sec-label">ESTILO DE RABIOLA</label>
+            <div id="opt-tails" class="option-stack">
+              <button class="opt-chip active" data-tail="padrao">Fitinha Padrão (Equilibrada)</button>
+              <button class="opt-chip" data-tail="longa">Rabiola Longa (Estável no Vento)</button>
+              <button class="opt-chip" data-tail="curta">Rabiola Curta / Rápida (Mais Giro)</button>
+            </div>
+
+            <label class="sec-label" style="margin-top: 12px;">HORÁRIO &amp; CLIMA</label>
+            <div id="opt-weather" class="option-stack">
+              <button class="opt-chip active" data-weather="tarde">☀️ Tarde de Sol (15h30)</button>
+              <button class="opt-chip" data-weather="pordosol">🌇 Pôr do Sol Dourado (17h45)</button>
+              <button class="opt-chip" data-weather="ventania">💨 Manhã de Ventania (09h30)</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="oficina-footer">
+        <button id="btn-apply-oficina" class="primary-cta">PRONTO — VOLTAR PRO CÉU</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="online-modal" class="modal-backdrop hidden">
+    <div class="online-card glass-card">
+      <div class="oficina-header">
+        <div>
+          <h2>🌐 SALAS ONLINE</h2>
+          <p>Crie uma sala privada ou entre usando o código de um amigo</p>
+        </div>
+        <button id="btn-close-online" class="close-btn">✕</button>
+      </div>
+      <div class="online-form">
+        <label class="sec-label" for="online-name">SEU APELIDO</label>
+        <input id="online-name" maxlength="18" value="Pipeiro" placeholder="Digite seu apelido" />
+        <label class="sec-label" for="online-room">CÓDIGO DA SALA (PARA ENTRAR)</label>
+        <input id="online-room" maxlength="8" placeholder="Ex.: PIPA42" autocomplete="off" />
+        <label class="sec-label" for="online-server">SERVIDOR (AVANÇADO)</label>
+        <input id="online-server" placeholder="Automático: mesmo endereço do jogo" />
+        <div class="online-actions">
+          <button id="btn-create-room" class="primary-cta">CRIAR SALA</button>
+          <button id="btn-join-room" class="secondary-cta">ENTRAR NA SALA</button>
+        </div>
+        <div id="online-status" class="online-status">Desconectado. Escolha criar uma sala ou entrar com um código.</div>
+        <div id="online-room-created" class="room-created hidden">
+          <span>SUA SALA</span>
+          <strong id="online-room-code">------</strong>
+          <button id="btn-copy-room" class="secondary-cta">COPIAR CÓDIGO</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
