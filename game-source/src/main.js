@@ -1129,6 +1129,8 @@ class Pipa3DGame {
       tailStyle: this.playerConfig.tailStyle
     });
     this.playerKite.setLineType(this.playerConfig.lineTypeId);
+    const craftedSetup = this.progression.profile.craftLog.find((entry) => entry.modelId === this.playerConfig.modelId);
+    this.playerKite.setMaterialSetup(craftedSetup || {});
     this.progression.discoverKite(this.playerConfig.modelId);
     this.playerKite.condition = this.progression.getKiteCondition(this.playerConfig.modelId);
     this.carretilha.setLineColor(LINE_TYPES[this.playerConfig.lineTypeId].hex);
@@ -1323,9 +1325,10 @@ class Pipa3DGame {
   _updateKiteWear(dt) {
     if (!this.playerKite.active || this.gameMode === 'online') return;
     const pressure = this.playerKite.aeroDynamicPressure || 0;
-    const stressRate = 0.006 + pressure * 0.00048
+    const materialDurability = this.playerKite.materialProfile?.durabilityMultiplier || 1;
+    const stressRate = (0.006 + pressure * 0.00048
       + (this.playerKite.stalled ? 0.018 : 0)
-      + this.playerKite.socadaBoost * 0.004;
+      + this.playerKite.socadaBoost * 0.004) / materialDurability;
     this.kiteWearPending += Math.max(0, dt) * stressRate;
     if (this.kiteWearPending < 0.55) return;
     const amount = this.kiteWearPending;

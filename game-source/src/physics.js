@@ -6,6 +6,7 @@ import { KiteVisual } from './kiteMesh.js';
 import { LINE_TYPES } from './carretilha.js';
 import { evaluateReloScore } from './relo.js';
 import { getKiteAeroProfile, getWindPhase, sampleWindAt } from './kiteAerodynamics.js';
+import { getKiteMaterialProfile } from './kiteMaterials.js';
 
 export const STRING_SEGMENTS = 28;
 
@@ -81,6 +82,7 @@ export class KiteEntity {
 
     this.anchorPos = anchorPos.clone();
     this.lineType = LINE_TYPES[lineTypeId] || LINE_TYPES.rosa_chilena;
+    this.materialProfile = getKiteMaterialProfile();
 
     this.visual = new KiteVisual(scene, { modelId, patternId, tailStyle });
 
@@ -152,6 +154,11 @@ export class KiteEntity {
 
   setLineType(lineTypeId) {
     this.lineType = LINE_TYPES[lineTypeId] || LINE_TYPES.rosa_chilena;
+  }
+
+  setMaterialSetup(setup = {}) {
+    this.materialProfile = getKiteMaterialProfile(setup);
+    return this.materialProfile;
   }
 
   spawnInSky(lowLaunch = false) {
@@ -362,13 +369,16 @@ export class KiteEntity {
 
     // 2. Classic nose rotation: direct steering with natural rabiola recovery.
     const steer = THREE.MathUtils.clamp(controls.steer || 0, -1, 1);
-    const rabicoWildness = (1.0 + (1.0 - tailRatio) * 1.15) * (1.04 - aeroProfile.stability * 0.04);
+    const material = this.materialProfile || getKiteMaterialProfile();
+    const rabicoWildness = (1.0 + (1.0 - tailRatio) * 1.15)
+      * (1.04 - aeroProfile.stability * 0.04)
+      * (1.15 - material.stabilityMultiplier * 0.15);
 
     if (Math.abs(steer) > 0.04) {
-      const turnRate = 3.65 * spec.turnMult * rabicoWildness;
+      const turnRate = 3.65 * spec.turnMult * material.steeringMultiplier * rabicoWildness;
       this.angularVel += (steer * turnRate - this.angularVel) * Math.min(1, stepDt * 14);
     } else if ((controls.release || controls.quickRelease) && this.socadaBoost < 0.15) {
-      const spinTarget = spec.spinRate * rabicoWildness * (controls.quickRelease ? 1.42 : 0.82);
+      const spinTarget = spec.spinRate * material.steeringMultiplier * rabicoWildness * (controls.quickRelease ? 1.42 : 0.82);
       this.angularVel += (spinTarget - this.angularVel)
         * Math.min(1, stepDt * (controls.quickRelease ? 10 : 7));
     } else {
@@ -399,6 +409,7 @@ export class KiteEntity {
     const forwardDrive =
       (1.35 + activeInput * 9.8 + this.socadaBoost * 25.5 + this.disbicarBoost * 8.5)
       * spec.speedMult
+      * material.speedMultiplier
       * (windSpeed / 9.0);
 
     _DesiredVel.copy(_noseDir).multiplyScalar(forwardDrive);
@@ -413,8 +424,13 @@ export class KiteEntity {
 
     const slack = 1.0 - this.tension;
     _DesiredVel.addScaledVector(flightWind, 0.36 + slack * 0.68);
-    const highAngleDrag = Math.max(0, _rad.y - (0.43 + aeroProfile.stallAngle * 0.06)) * 9.5;
-    const modelLift = THREE.MathUtils.clamp(1 + (aeroProfile.lift / aeroProfile.mass - 1) * 0.16, 0.92, 1.05);
+    const highAngleDrag = Math.max(0, _rad.y - (0.43 + aeroProfile.stallAngle * 0.06))
+      * 9.5 * material.dragMultiplier;
+    const modelLift = THREE.MathUtils.clamp(
+      (1 + (aeroProfile.lift / aeroProfile.mass - 1) * 0.16) * material.liftMultiplier,
+      0.90,
+      1.12
+    );
     const netVertical =
       (windSpeed * 0.30 * (0.48 + this.tension * 0.52) * modelLift)
       - (2.45 + slack * 2.6 + highAngleDrag);
