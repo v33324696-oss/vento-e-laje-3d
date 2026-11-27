@@ -2254,9 +2254,9 @@ class Pipa3DGame {
       reloIntensity: combatInfo.reloIntensity,
       reloSpeed: combatInfo.reloSpeed,
       kiteModelId: this.playerConfig.modelId,
-      kiteActive: this.playerKite.active || this.playerKiteInHand,
+      kiteActive: this.playerKite.active,
       airborneKites: [
-        ...(this.playerKite.active || this.playerKiteInHand
+        ...(this.playerKite.active
           ? [{ modelId: this.playerConfig.modelId }]
           : []),
         ...this._getActiveRivals()
