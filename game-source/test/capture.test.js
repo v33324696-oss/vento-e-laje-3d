@@ -9,7 +9,7 @@ test('aparar only succeeds when the flying line touches the loose rabiola', () =
   const line = [v(-2, 0, 0), v(2, 0, 0)];
   const tail = [
     v(5, 4, 0), v(5, 3, 0), v(-0.5, 0.1, 0),
-    v(0.5, 0.1, 0), v(1, -0.2, 0)
+    v(0.5, 0.1, 0), v(1, 1.2, 0)
   ];
   const result = findRabiolaCapture(line, tail, 0.22, 2);
   assert.ok(result);
