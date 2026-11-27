@@ -11,6 +11,7 @@ export class RivalAIController {
     );
     this.retargetTimer = 1.5 + Math.random() * 2.5;
     this.socadaTimer = 0.4 + Math.random() * 0.9;
+    this.disbicarTimer = 0.8 + Math.random() * 1.2;
     this.respawnTimer = 0;
   }
 
@@ -32,6 +33,7 @@ export class RivalAIController {
 
     this.retargetTimer -= dt;
     this.socadaTimer -= dt;
+    this.disbicarTimer -= dt;
 
     // Pick new tactical target periodically
     if (this.retargetTimer <= 0) {
@@ -122,16 +124,22 @@ export class RivalAIController {
 
     let pull = false;
     let release = false;
+    let quickRelease = false;
 
     if (this.kite.inRelo && gameMode !== 'zen') {
       // Tactical relo response!
       if (this.personality === 'trickster') {
-        release = true; // Cuts on the largada/descarrego
+        release = true;
+        quickRelease = this.kite.reloContactTime > 0.18 && this.kite.tension > 0.45 && Math.random() < 0.24;
       } else {
         pull = true;
         if (this.socadaTimer <= 0) {
           this.kite.triggerSocada(0.95 * difficulty);
           this.socadaTimer = 0.22 + Math.random() * 0.25;
+        }
+        if (this.disbicarTimer <= 0 && (this.personality === 'hunter' || this.personality === 'slasher')) {
+          this.kite.triggerDisbicar(Math.sign(steer) || (Math.random() > 0.5 ? 1 : -1));
+          this.disbicarTimer = 1.15 + Math.random() * 1.1;
         }
         if (this.personality === 'slasher' && Math.random() < 0.08 * difficulty) {
           this.kite.triggerDisque(Math.random() > 0.5 ? 1 : -1);
@@ -151,7 +159,7 @@ export class RivalAIController {
       }
     }
 
-    return { pull, release, steer };
+    return { pull, release, quickRelease, steer };
   }
 
   onCut(respawnDelay = 4.2) {
