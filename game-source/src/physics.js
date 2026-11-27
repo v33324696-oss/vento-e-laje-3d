@@ -436,7 +436,7 @@ export class KiteEntity {
     _DesiredVel.set(aero.fx, aero.fy - 2.45, aero.fz);
     // Immediate pilot authority: steering adds a bounded lateral acceleration
     // while aerodynamic banking and nose rotation build underneath it.
-    _DesiredVel.addScaledVector(_tRight, steer * (5.8 + Math.min(2.2, apparentSpeed * 0.12)));
+    // Steering is applied as a closed-loop lateral velocity command after integration.
 
     // Hand inputs remain impulses layered on top of the aerodynamic flight.
     _DesiredVel.addScaledVector(_noseDir, this.socadaBoost * 8.0 + this.disbicarBoost * 4.0 + (controls.pull ? 0.3 : 0));
@@ -451,6 +451,23 @@ export class KiteEntity {
     // to the changing air mass instead of steering toward an artificial velocity.
     this.velocity.addScaledVector(_DesiredVel, stepDt);
     this.velocity.multiplyScalar(Math.exp(-0.018 * stepDt));
+
+    // Directly steer actual kite movement in the tether tangent plane. This
+    // shared response applies to every model, including AI-controlled kites.
+    if (Math.abs(steer) > 0.02) {
+      const lateralVelocity = this.velocity.dot(_tRight);
+      const desiredLateralVelocity = steer * THREE.MathUtils.clamp(
+        4.8 + apparentSpeed * 0.34,
+        4.8,
+        9.2
+      );
+      const steeringBlend = Math.min(1, stepDt * 8.5);
+      this.velocity.addScaledVector(
+        _tRight,
+        (desiredLateralVelocity - lateralVelocity) * steeringBlend
+      );
+    }
+
     this.position.addScaledVector(this.velocity, stepDt);
 
     // 4. Keep kite in forward sky arena & enforce spherical tether constraint
