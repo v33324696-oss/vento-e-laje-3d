@@ -7,7 +7,7 @@ const worldSource = readFileSync(new URL('../src/world.js', import.meta.url), 'u
 
 test('mobile devices get a separate performance-first graphics preference', () => {
   assert.match(mainSource, /this\.isMobileLayout \? 'vento-laje-graphics-mobile' : 'vento-laje-graphics'/);
-  assert.match(mainSource, /let savedQuality = this\.isMobileLayout \? 'performance' : 'balanced'/);
+  assert.match(mainSource, /let savedQuality = 'performance'/);
   assert.match(mainSource, /mobileRatio: 0\.68/);
   assert.match(mainSource, /this\.isMobileLayout \? false : preset\.shadows/);
   assert.match(mainSource, /antialias: false/);
@@ -17,7 +17,7 @@ test('mobile devices get a separate performance-first graphics preference', () =
 });
 
 test('resizing preserves the selected graphics profile', () => {
-  assert.match(mainSource, /this\._applyGraphicsQuality\(this\.graphicsQuality \|\| \(this\.isMobileLayout \? 'performance' : 'balanced'\), false\)/);
+  assert.match(mainSource, /this\\._applyGraphicsQuality\\(this\\.graphicsQuality \\|\\| 'performance', false\\)/);
 });
 
 test('mobile scene keeps the full player but skips low-detail background rigs', () => {
