@@ -648,10 +648,22 @@ class Pipa3DGame {
     const renderLines = () => {
       linesBox.innerHTML = '';
       Object.values(LINE_TYPES).forEach((lt) => {
+        const owned = this.progression.ownsLine(lt.id);
         const btn = document.createElement('button');
-        btn.className = `opt-chip ${this.playerConfig.lineTypeId === lt.id ? 'active' : ''}`;
-        btn.innerHTML = `<span class="swatch-dot" style="background:${lt.hex}"></span><span>${lt.name}</span>`;
+        btn.className = `opt-chip ${this.playerConfig.lineTypeId === lt.id ? 'active' : ''} ${owned ? '' : 'locked'}`;
+        btn.innerHTML = `<span class="swatch-dot" style="background:${lt.hex}"></span><span>${owned ? lt.name : `🔒 ${lt.name} • 900 moedas`}</span>`;
         btn.addEventListener('click', () => {
+          if (!owned) {
+            const result = this.progression.buyLine(lt.id);
+            if (result.ok) {
+              this._renderCareerHub();
+              this.showBanner('LINHA DESBLOQUEADA!', 'A linha de descarga entrou no seu inventário.', 'catch');
+            } else {
+              this.showBanner('LINHA BLOQUEADA', result.reason, 'danger');
+            }
+            renderLines();
+            return;
+          }
           this.playerConfig.lineTypeId = lt.id;
           this.applyPlayerCustomization();
           renderLines();
@@ -660,7 +672,7 @@ class Pipa3DGame {
       });
       const selected = LINE_TYPES[this.playerConfig.lineTypeId] || LINE_TYPES.branca_pura;
       const dischargeNote = selected.dischargeSafe ? ' • PROTEGIDA AO DESCARREGAR' : '';
-      lineDesc.textContent = `${selected.desc} • ATAQUE ${Math.round(selected.cutPower * 100)} • HP ${Math.round(selected.durability * 100)} • RECUPERAÇÃO ${Math.round(selected.recovery * 100)}${dischargeNote}`;
+      lineDesc.textContent = `${selected.desc} • ATAQUE ${Math.round(selected.cutPower * 100)} • HP ${Math.round(selected.durability * 100)} • RECUPERAÇÃO ${Math.round(selected.recovery * 100)}${dischargeNote}${this.progression.profile.level < 4 ? ' • LINHA ESPECIAL: NÍVEL 4 + 900 MOEDAS' : ' • LINHA ESPECIAL: 900 MOEDAS'}`;
     };
     renderLines();
 
