@@ -5,7 +5,7 @@ import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { KiteVisual } from './kiteMesh.js';
 import { LINE_TYPES } from './carretilha.js';
 import { evaluateReloScore } from './relo.js';
-import { calculateAerodynamicForces, getKiteAeroProfile, getWindPhase, sampleWindAt } from './kiteAerodynamics.js';
+import { bankSpanForSteering, calculateAerodynamicForces, getKiteAeroProfile, getWindPhase, sampleWindAt } from './kiteAerodynamics.js';
 import { calculateCableResponse, calculateStructuralResponse, calculateWinchResponse } from './kiteStructure.js';
 
 export const STRING_SEGMENTS = 28;
@@ -267,7 +267,7 @@ export class KiteEntity {
     _rotMat.makeBasis(_kiteX, _kiteY, _kiteZ);
     this.quaternion.setFromRotationMatrix(_rotMat);
     if (Math.abs(this.bankAngle) > 0.0001) {
-      _bankQuat.setFromAxisAngle(_noseDir, this.bankAngle);
+      _bankQuat.setFromAxisAngle(_rad, this.bankAngle * 0.28);
       this.quaternion.multiply(_bankQuat);
     }
     void windVec;
@@ -347,21 +347,21 @@ export class KiteEntity {
     if (this.tailCutCooldown > 0) this.tailCutCooldown = Math.max(0, this.tailCutCooldown - stepDt);
 
     // 1. Line Reel & Tension state
-    let targetTension = 0.36;
+    let targetTension = 0.18;
     this.reelSpeed = 0;
 
     if (controls.pull) {
       this.reelSpeed = -7.2 * spec.speedMult;
       this.lineLength = Math.max(this.minLine, this.lineLength + this.reelSpeed * stepDt);
-      targetTension = 0.70;
+      targetTension = 0.66;
     } else if (controls.quickRelease) {
       this.reelSpeed = 15.5;
       this.lineLength = Math.min(this.maxLine, this.lineLength + this.reelSpeed * stepDt);
-      targetTension = 0.12;
+      targetTension = 0.10;
     } else if (controls.release) {
       this.reelSpeed = 5.2;
       this.lineLength = Math.min(this.maxLine, this.lineLength + this.reelSpeed * stepDt);
-      targetTension = 0.22;
+      targetTension = 0.16;
     }
 
     // Manual inputs alter the desired feel, while the tether constraint below
@@ -373,18 +373,19 @@ export class KiteEntity {
     const rabicoWildness = 1.0 + (1.0 - tailRatio) * 1.15;
 
     if (Math.abs(steer) > 0.04) {
-      const turnRate = 3.65 * spec.turnMult * rabicoWildness;
-      this.angularVel += (steer * turnRate - this.angularVel) * Math.min(1, stepDt * 14);
+      // The nose turns at a controllable rate; steering also banks the wing
+      // below, so input changes the actual lift direction instead of only its look.
+      const turnRate = 1.42 * spec.turnMult * (1 + (1 - tailRatio) * 0.42);
+      this.angularVel += (steer * turnRate - this.angularVel) * Math.min(1, stepDt * 8.5);
     } else if ((controls.release || controls.quickRelease) && this.socadaBoost < 0.15) {
-      // Soft discharge steers a controlled turn; rapid discharge creates a wider, faster escape arc.
-      const spinTarget = spec.spinRate * rabicoWildness * (controls.quickRelease ? 1.42 : 0.82);
-      this.angularVel += (spinTarget - this.angularVel) * Math.min(1, stepDt * (controls.quickRelease ? 10 : 7));
+      const spinTarget = spec.spinRate * (controls.quickRelease ? 0.78 : 0.42);
+      this.angularVel += (spinTarget - this.angularVel) * Math.min(1, stepDt * 5.2);
     } else {
-      // Pendulum restoring torque from the rabiola gently rights the kite when idle
-      const pendulumRestore = -Math.sin(this.noseAngle) * (1.0 + aeroProfile.stability * 1.7) * tailRatio;
-      // If rabicó (tail cut very short), slight mischievous drift remains
-      const rabicoSpin = tailRatio < 0.45 ? (0.45 - tailRatio) * 3.8 : 0;
-      this.angularVel += (pendulumRestore + rabicoSpin - this.angularVel) * Math.min(1, stepDt * (4.2 + aeroProfile.stability * 2.4));
+      // A damped pendulum keeps the nose steady without swinging uncontrollably.
+      const pendulumRestore = -Math.sin(this.noseAngle) * (0.62 + aeroProfile.stability * 0.82) * tailRatio;
+      const rabicoSpin = tailRatio < 0.45 ? (0.45 - tailRatio) * 1.65 : 0;
+      const angularDamping = 1.45 + aeroProfile.stability * 0.72;
+      this.angularVel += (pendulumRestore + rabicoSpin - this.angularVel * angularDamping) * stepDt;
     }
 
     this.noseAngle += this.angularVel * stepDt;
@@ -409,16 +410,19 @@ export class KiteEntity {
       0.82
     );
     this.angleOfAttack += (targetAoA - this.angleOfAttack) * Math.min(1, stepDt * 3.8);
+    const bankLimit = tailRatio < 0.45 ? 0.48 : 0.72;
     const targetBank = THREE.MathUtils.clamp(
-      -steer * 0.42 + this.angularVel * 0.035 + sideSlip * Math.sign(_airRelative.dot(_tRight)) * 0.10,
-      -0.62,
-      0.62
+      steer * bankLimit + this.angularVel * 0.018
+        + sideSlip * Math.sign(_airRelative.dot(_tRight)) * 0.035,
+      -bankLimit,
+      bankLimit
     );
-    this.bankAngle += (targetBank - this.bankAngle) * Math.min(1, stepDt * 4.8);
+    this.bankAngle += (targetBank - this.bankAngle) * Math.min(1, stepDt * 6.2);
+    bankSpanForSteering(_tRight, _airRelative, this.bankAngle, _bankedSpan);
 
     const aero = calculateAerodynamicForces({
       airVelocity: _airRelative,
-      spanDirection: _tRight,
+      spanDirection: _bankedSpan,
       forwardDirection: _noseDir,
       modelId: spec.id,
       tailRatio,
@@ -1033,6 +1037,7 @@ const _hotCol = new THREE.Color();
 const _vertCol = new THREE.Color();
 const _DesiredVel = new THREE.Vector3();
 const _airRelative = new THREE.Vector3();
+const _bankedSpan = new THREE.Vector3();
 const _ropeVelocity = new THREE.Vector3();
 const _ropeDelta = new THREE.Vector3();
 const _ropeSide = new THREE.Vector3();
