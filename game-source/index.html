@@ -146,6 +146,8 @@
     <div class="guide-row"><kbd>S</kbd> / <kbd>Botão Dir.</kbd> <span>DESCARREGAR — soltar linha devagar e girar</span></div>
     <div class="guide-row"><kbd>R</kbd> <span>DESCARREGAR RÁPIDO — abrir distância</span></div>
     <div class="guide-row"><kbd>B</kbd> <span>DISBICAR — puxão brusco com movimento</span></div>
+    <div class="guide-row"><kbd>G</kbd> <span>RODAR — giro completo do pipa; A/D escolhe o lado</span></div>
+    <div class="guide-row"><kbd>F</kbd> <span>RETÃO — arrancada curta mantendo o bico alinhado</span></div>
     <div class="guide-row"><kbd>RELO</kbd> <span>Quando as linhas encostarem, aparece o aviso no centro</span></div>
     <div class="guide-row"><kbd>APARAR</kbd> <span>Toque a rabiola; acerte 5 travas com ESPAÇO e segure W para recolher a pipa</span></div>
     <div class="guide-row"><kbd>COMBO FÁCIL</kbd> <span>Segure W para puxar e toque ESPAÇO para socar</span></div>
@@ -242,6 +244,8 @@
           <span>DISBICAR</span>
           <kbd>B</kbd>
         </button>
+        <button id="act-spin" class="deck-btn secondary-btn"><span>RODAR</span><kbd>G</kbd></button>
+        <button id="act-retao" class="deck-btn secondary-btn"><span>RETÃO</span><kbd>F</kbd></button>
       </div>
       <div class="main-actions-row">
         <button id="act-release" class="deck-btn release-btn">
@@ -398,6 +402,7 @@
               <button class="opt-chip active" data-tail="padrao">Fitinha Padrão (Equilibrada)</button>
               <button class="opt-chip" data-tail="longa">Rabiola Longa (Estável no Vento)</button>
               <button class="opt-chip" data-tail="curta">Rabiola Curta / Rápida (Mais Giro)</button>
+              <button class="opt-chip" data-tail="sem">Sem rabiola (Raia)</button>
             </div>
 
             <label class="sec-label" style="margin-top: 12px;">HORÁRIO &amp; CLIMA</label>
