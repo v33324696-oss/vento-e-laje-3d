@@ -716,6 +716,20 @@ kbd {
   filter: brightness(1.06);
 }
 
+.boot-status {
+  max-width: 660px;
+  margin: 12px auto 0;
+  padding: 11px 13px;
+  border: 1px solid rgba(248, 113, 113, .48);
+  border-radius: 10px;
+  background: rgba(127, 29, 29, .22);
+  color: #fecaca;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 .secondary-cta {
   background: rgba(255, 255, 255, 0.1);
   color: var(--text-main);

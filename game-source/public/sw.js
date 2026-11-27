@@ -1,4 +1,4 @@
-const CACHE = 'vento-laje-shell-v2';
+const CACHE = 'vento-laje-shell-v3';
 const CORE = ['/', '/manifest.webmanifest', '/pipa.svg', '/icons/pipa-192.png', '/icons/pipa-512.png'];
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(CORE)).then(() => self.skipWaiting()));

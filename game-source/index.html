@@ -369,6 +369,7 @@
         <button id="btn-open-garage-start" class="secondary-cta">🏠 Minha Casa</button>
         <button id="btn-start-game" class="primary-cta">COMEÇAR COM A PIPA NA MÃO ▶</button>
       </div>
+      <div id="boot-status" class="boot-status hidden" role="alert" aria-live="polite"></div>
     </div>
   </div>
 
@@ -559,6 +560,79 @@
     </div>
   </div>
 
+  <script>
+    (() => {
+      const showBootStatus = (message) => {
+        const status = document.getElementById('boot-status');
+        if (!status) return;
+        status.textContent = message;
+        status.classList.remove('hidden');
+      };
+      const hideBootStatus = () => {
+        document.getElementById('boot-status')?.classList.add('hidden');
+      };
+
+      document.addEventListener('click', (event) => {
+        const modeCard = event.target.closest?.('.mode-card');
+        if (modeCard) {
+          event.preventDefault();
+          document.querySelectorAll('.mode-card').forEach((card) => {
+            card.classList.toggle('selected', card === modeCard);
+          });
+          const mode = modeCard.dataset.mode;
+          window.__pipaPendingMode = mode;
+          if (window.pipaGame && typeof window.pipaGame.setGameMode === 'function') {
+            try {
+              window.pipaGame.setGameMode(mode);
+              hideBootStatus();
+            } catch (error) {
+              window.__pipaBootError = error;
+              showBootStatus('O modo foi selecionado, mas o jogo encontrou um erro: ' + (error?.message || String(error)));
+            }
+          } else if (window.__pipaBootError) {
+            showBootStatus('A interface respondeu, mas o motor 3D não iniciou: ' + (window.__pipaBootError.message || String(window.__pipaBootError)));
+          }
+          return;
+        }
+
+        const startButton = event.target.closest?.('#btn-start-game');
+        if (!startButton) return;
+        event.preventDefault();
+        if (!window.pipaGame || typeof window.pipaGame.startGame !== 'function') {
+          const error = window.__pipaBootError;
+          const details = error
+            ? (error.message || String(error))
+            : 'O JavaScript principal ainda não terminou de carregar.';
+          const webglHint = /webgl|context|gpu|renderer/i.test(details)
+            ? ' Verifique se a aceleração gráfica está ativada no Edge e feche outras abas com jogos 3D.'
+            : ' Recarregue a página com Ctrl + F5.';
+          showBootStatus('Não foi possível iniciar o jogo: ' + details + webglHint);
+          return;
+        }
+        try {
+          window.pipaGame.startGame();
+          hideBootStatus();
+        } catch (error) {
+          window.__pipaBootError = error;
+          console.error('[Vento & Laje] falha ao iniciar a partida:', error);
+          showBootStatus('Erro ao iniciar a partida: ' + (error?.message || String(error)) + ' Recarregue com Ctrl + F5.');
+        }
+      }, true);
+
+      window.addEventListener('error', (event) => {
+        const error = event.error || new Error(event.message || 'Falha ao carregar um arquivo JavaScript.');
+        window.__pipaBootError = error;
+        if (event.target?.tagName === 'SCRIPT') {
+          showBootStatus('Um arquivo do jogo não carregou. Recarregue com Ctrl + F5. Detalhe: ' + (error.message || 'erro de carregamento'));
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', (event) => {
+        const error = event.reason instanceof Error ? event.reason : new Error(String(event.reason || 'Erro interno'));
+        window.__pipaBootError = error;
+        console.error('[Vento & Laje] falha na inicialização:', error);
+      });
+    })();
+  </script>
   <script type="module" src="./src/main.js"></script>
 </body>
 </html>
