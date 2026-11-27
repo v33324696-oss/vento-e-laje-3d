@@ -498,6 +498,21 @@ kbd {
   gap: 6px;
 }
 
+.disque-row .secondary-btn {
+  justify-content: center;
+  min-width: 0;
+}
+
+.quick-release-btn {
+  background: rgba(180, 83, 9, 0.76);
+  border-color: rgba(251, 146, 60, 0.62);
+}
+
+.disbicar-btn {
+  background: rgba(126, 34, 206, 0.72);
+  border-color: rgba(192, 132, 252, 0.65);
+}
+
 .release-btn,
 .pull-btn,
 .socar-btn {
@@ -1045,8 +1060,9 @@ button { touch-action: manipulation; }
   .steer-caption { display: none; }
   .steer-btn { min-width: 50px; min-height: 40px; padding: 7px 8px; font-size: 13px; }
   .action-deck { width: 100%; align-items: stretch; gap: 5px; }
-  .disque-row { justify-content: flex-end; gap: 5px; }
-  .secondary-btn { min-height: 34px; padding: 5px 9px; font-size: 10px; }
+  .disque-row { justify-content: stretch; gap: 4px; }
+  .disque-row .secondary-btn { flex: 1 1 0; min-height: 34px; padding: 5px 3px; gap: 3px; font-size: 8.5px; }
+  .disque-row .secondary-btn kbd { display: none; }
   .main-actions-row { display: grid; grid-template-columns: 1fr 1fr 1.08fr; gap: 6px; }
   .release-btn, .pull-btn, .socar-btn {
     min-width: 0;
