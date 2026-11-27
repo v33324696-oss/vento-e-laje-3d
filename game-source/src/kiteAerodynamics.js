@@ -66,6 +66,36 @@ export function sampleWindAt(baseWind, position, time, phase = 0, out = {}) {
 
 // Returns acceleration from lift and drag. spanDirection is the kite's local
 // span axis; forwardDirection points from the tail toward the nose.
+
+export function bankSpanForSteering(spanDirection, airVelocity, bankAngle, out = {}) {
+  const airLength = Math.hypot(airVelocity.x || 0, airVelocity.y || 0, airVelocity.z || 0);
+  if (airLength < 0.0001) {
+    out.x = spanDirection.x;
+    out.y = spanDirection.y;
+    out.z = spanDirection.z;
+    return out;
+  }
+
+  const ax = airVelocity.x / airLength;
+  const ay = airVelocity.y / airLength;
+  const az = airVelocity.z / airLength;
+  const angle = clamp(bankAngle, -0.82, 0.82);
+  const cosine = Math.cos(angle);
+  const sine = Math.sin(angle);
+  const dot = ax * spanDirection.x + ay * spanDirection.y + az * spanDirection.z;
+  const crossX = ay * spanDirection.z - az * spanDirection.y;
+  const crossY = az * spanDirection.x - ax * spanDirection.z;
+  const crossZ = ax * spanDirection.y - ay * spanDirection.x;
+  out.x = spanDirection.x * cosine + crossX * sine + ax * dot * (1 - cosine);
+  out.y = spanDirection.y * cosine + crossY * sine + ay * dot * (1 - cosine);
+  out.z = spanDirection.z * cosine + crossZ * sine + az * dot * (1 - cosine);
+  const length = Math.hypot(out.x, out.y, out.z) || 1;
+  out.x /= length;
+  out.y /= length;
+  out.z /= length;
+  return out;
+}
+
 export function calculateAerodynamicForces({
   airVelocity,
   spanDirection,
