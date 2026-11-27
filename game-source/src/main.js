@@ -40,7 +40,8 @@ class Pipa3DGame {
       { id: 'laje', label: 'Câm: Laje' },
       { id: 'aerea', label: 'Câm: Aérea' },
       { id: 'duelo', label: 'Câm: Duelo' },
-      { id: 'personagem', label: 'Câm: Pipeiro' }
+      { id: 'personagem', label: 'Câm: Pipeiro' },
+      { id: 'primeira_pessoa', label: 'Câm: 1ª pessoa' }
     ];
     this.camModeIdx = 0;
 
@@ -98,6 +99,12 @@ class Pipa3DGame {
     this.launchTapCount = 0;
     this.lastLaunchTapAt = -Infinity;
     this.launchTapQuality = 0;
+    this.kiteWearPending = 0;
+    this.replayBuffer = [];
+    this.replayCaptureAccumulator = 0;
+    this.replayPlayback = null;
+    this.lastReplayFrames = null;
+    this.replaySavedState = null;
 
     this._initThree();
     this._initEntities();
@@ -193,6 +200,7 @@ class Pipa3DGame {
       const ai = new RivalAIController(rivalKite, personalities[idx % personalities.length]);
       this.rivals.push({ kite: rivalKite, ai, previousReleaseHeld: false });
     });
+    this.playerKite.condition = this.progression.getKiteCondition(this.playerConfig.modelId);
     this._preparePlayerKiteInHand();
   }
 
@@ -405,6 +413,11 @@ class Pipa3DGame {
 
     // Top HUD buttons
     document.getElementById('btn-camera').addEventListener('click', () => this.cycleCamera());
+    document.getElementById('btn-garage')?.addEventListener('click', () => this.openGarage());
+    document.getElementById('btn-open-garage-start')?.addEventListener('click', () => this.openGarage());
+    document.getElementById('btn-close-garage')?.addEventListener('click', () => document.getElementById('garage-modal')?.classList.add('hidden'));
+    document.getElementById('btn-upgrade-house')?.addEventListener('click', () => this._upgradeHouse());
+    document.getElementById('btn-replay')?.addEventListener('click', () => this._toggleReplay());
     document.getElementById('btn-weather').addEventListener('click', () => this.cycleWeather());
     document.getElementById('btn-oficina').addEventListener('click', () => this.openOficina());
     document.getElementById('btn-explore').addEventListener('click', () => this.toggleCharacterMode());
@@ -957,6 +970,8 @@ class Pipa3DGame {
       tailStyle: this.playerConfig.tailStyle
     });
     this.playerKite.setLineType(this.playerConfig.lineTypeId);
+    this.progression.discoverKite(this.playerConfig.modelId);
+    this.playerKite.condition = this.progression.getKiteCondition(this.playerConfig.modelId);
     this.carretilha.setLineColor(LINE_TYPES[this.playerConfig.lineTypeId].hex);
     this.sound.playSocada(0.6);
   }
@@ -984,6 +999,90 @@ class Pipa3DGame {
   _getActiveRivals() {
     if (this.gameMode === 'online') return [];
     return this.gameMode === 'duelo' ? this.rivals.slice(0, 1) : this.rivals;
+  }
+
+  openGarage() {
+    this.progression.visitGarage();
+    this._renderGarage();
+    document.getElementById('garage-modal')?.classList.remove('hidden');
+  }
+
+  _renderGarage() {
+    const house = this.progression.profile.house;
+    const set = (id, value) => {
+      const node = document.getElementById(id);
+      if (node) node.textContent = value;
+    };
+    set('garage-house-level', house.level);
+    set('garage-slot-count', `${house.ownedKites.length}/${house.garageSlots} espaços`);
+    set('garage-coin-count', this.progression.profile.coins.toLocaleString('pt-BR'));
+    set('garage-repair-count', this.progression.profile.stats.repairs.toLocaleString('pt-BR'));
+    const upgrade = document.getElementById('btn-upgrade-house');
+    if (upgrade) {
+      upgrade.disabled = house.level >= 3;
+      upgrade.textContent = house.level >= 3 ? 'CASA NO NÍVEL MÁXIMO' : `AMPLIAR CASA · ${house.level === 1 ? '850' : '1.800'} 🪙`;
+    }
+
+    const list = document.getElementById('garage-kite-list');
+    if (!list) return;
+    const ids = house.ownedKites.slice(0, house.garageSlots);
+    list.innerHTML = ids.map((id) => {
+      const model = KITE_MODELS[id];
+      const condition = this.progression.getKiteCondition(id);
+      const label = condition >= 80 ? 'Boa condição' : condition >= 45 ? 'Precisa de revisão' : 'Muito desgastada';
+      const color = condition >= 80 ? '#34d399' : condition >= 45 ? '#facc15' : '#fb7185';
+      return `<article class="garage-kite-card">
+        <div class="garage-kite-head"><strong>${model?.name || id}</strong><span>${Math.round(condition)}%</span></div>
+        <div class="garage-condition"><i style="width:${condition}%;background:${color}"></i></div>
+        <small>${label}</small>
+        <button type="button" class="secondary-cta garage-repair" data-repair-kite="${id}" ${condition >= 99.9 ? 'disabled' : ''}>
+          ${condition >= 99.9 ? 'EM DIA' : `REPARAR · ${Math.ceil((100-condition)*2.4)} 🪙`}
+        </button>
+      </article>`;
+    }).join('') || '<p class="garage-empty">Empine novos modelos para começar sua coleção.</p>';
+
+    list.querySelectorAll('[data-repair-kite]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const id = button.dataset.repairKite;
+        const result = this.progression.repairKite(id);
+        if (result.ok && result.repaired) {
+          if (this.playerConfig.modelId === id) this.playerKite.condition = 100;
+          this._renderGarage();
+          this._renderCareerHub();
+          this.showBanner('PIPA CONSERTADA!', `${KITE_MODELS[id].name} voltou a 100% de conservação. -${result.cost} moedas`, 'catch');
+        } else if (!result.ok) {
+          this.showBanner('NÃO FOI POSSÍVEL CONSERTAR', result.reason, 'danger');
+        }
+      });
+    });
+  }
+
+  _upgradeHouse() {
+    const result = this.progression.upgradeHouse();
+    if (!result.ok) {
+      this.showBanner('AMPLIAÇÃO BLOQUEADA', result.reason, 'danger');
+      return;
+    }
+    this._renderGarage();
+    this._renderCareerHub();
+    this.showBanner('CASA AMPLIADA!', `Garagem nível ${result.level}: mais espaço para suas pipas.`, 'catch');
+  }
+
+  _updateKiteWear(dt) {
+    if (!this.playerKite.active || this.gameMode === 'online') return;
+    const pressure = this.playerKite.aeroDynamicPressure || 0;
+    const stressRate = 0.006 + pressure * 0.00048
+      + (this.playerKite.stalled ? 0.018 : 0)
+      + this.playerKite.socadaBoost * 0.004;
+    this.kiteWearPending += Math.max(0, dt) * stressRate;
+    if (this.kiteWearPending < 0.55) return;
+    const amount = this.kiteWearPending;
+    this.kiteWearPending = 0;
+    const condition = this.progression.damageKite(this.playerConfig.modelId, amount);
+    this.playerKite.condition = condition;
+    if (condition < 25 && condition + amount >= 25) {
+      this.showBanner('PIPA DESGASTADA!', 'A estrutura está fraca. Vá à Casa/Garagem para fazer a manutenção.', 'danger');
+    }
   }
 
   _renderCareerHub() {
@@ -2056,6 +2155,24 @@ class Pipa3DGame {
         this.camera.fov += (58 - this.camera.fov) * Math.min(1, dt * 6);
         this.camera.updateProjectionMatrix();
       }
+    } else if (mode === 'primeira_pessoa') {
+      const avatar = this.world.playerAvatar;
+      _launchForward.set(0, 0, 1).applyEuler(avatar.rotation).normalize();
+      _camDesiredPos.set(avatar.position.x, avatar.position.y + 1.62, avatar.position.z);
+      this.camera.position.lerp(_camDesiredPos, Math.min(1, dt * 12));
+      if (this.playerKiteInHand) {
+        _lookAhead.copy(avatar.position).addScaledVector(_launchForward, 22);
+        _lookAhead.y += 1.1;
+      } else {
+        _lookAhead.copy(focusPos);
+        _lookAhead.y += 0.6;
+      }
+      this.camLookTarget.lerp(_lookAhead, Math.min(1, dt * 12));
+      this.camera.lookAt(this.camLookTarget);
+      if (Math.abs(this.camera.fov - 66) > 0.1) {
+        this.camera.fov += (66 - this.camera.fov) * Math.min(1, dt * 7);
+        this.camera.updateProjectionMatrix();
+      }
     } else if (mode === 'personagem') {
       const avatar = this.world.playerAvatar.position;
       _camDesiredPos.set(avatar.x, avatar.y + 3.7, avatar.z + 7.8);
@@ -2157,7 +2274,7 @@ class Pipa3DGame {
     this._updateCharacterMovement(dt);
     this._updateHeldPlayerKite(dt);
     const camModeId = this.cameraModes[this.camModeIdx].id;
-    this.world.update(this.windVec, elapsed, dt, camModeId !== 'laje' || this.characterMode);
+    this.world.update(this.windVec, elapsed, dt, (camModeId !== 'laje' && camModeId !== 'primeira_pessoa') || (this.characterMode && camModeId !== 'primeira_pessoa'));
 
     // 2. Gather player input & update camera + 3D carretilha
     const playerControls = this._gatherPlayerControls();
@@ -2197,6 +2314,7 @@ class Pipa3DGame {
       this.playerKite.anchorPos.y + 0.25
     );
 
+    this.playerKite.condition = this.progression.getKiteCondition(this.playerConfig.modelId);
     this.playerKite.update({
       controls: playerControls,
       windVec: this.windVec,
@@ -2208,6 +2326,8 @@ class Pipa3DGame {
       dt,
       time: elapsed
     });
+
+    this._updateKiteWear(dt);
 
     // 5. Update Rival AI Kites
     const difficulty = getAIDifficulty({
@@ -2297,6 +2417,7 @@ class Pipa3DGame {
 
     // Keep drawing the world even if a gameplay subsystem throws. This makes a
     // physics bug diagnosable without turning the entire play area into a blank screen.
+    this._recordReplayFrame(dt);
     this.renderer.render(this.scene, this.camera);
   }
 }
