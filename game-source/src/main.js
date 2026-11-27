@@ -14,11 +14,13 @@ import {
 } from './physics.js';
 import { RivalAIController } from './ai.js';
 import { evaluateReloScore } from './relo.js';
+import { ProgressionStore } from './progression.js';
 
 class Pipa3DGame {
   constructor() {
     this.container = document.getElementById('canvas-container');
     this.sound = new SoundEngine();
+    this.progression = new ProgressionStore();
 
     // Game state
     this.started = false;
@@ -89,6 +91,7 @@ class Pipa3DGame {
     });
     this._initUI();
     this._bindInputs();
+    this._renderCareerHub();
 
     this.lastFrameMs = performance.now();
     this.elapsedTime = 0;
@@ -256,6 +259,15 @@ class Pipa3DGame {
     zenSlider.addEventListener('input', (e) => {
       this.zenWindOverride = parseFloat(e.target.value);
       document.getElementById('val-zen-wind').textContent = this.zenWindOverride.toFixed(1);
+    });
+
+    // Profile nickname is saved locally and reused as the online display name.
+    const profileName = document.getElementById('profile-nickname');
+    profileName.value = this.progression.profile.nickname;
+    profileName.addEventListener('change', () => {
+      const nickname = this.progression.setNickname(profileName.value);
+      profileName.value = nickname;
+      document.getElementById('online-name').value = nickname;
     });
 
     // Populate Oficina options
@@ -444,6 +456,7 @@ class Pipa3DGame {
       document.getElementById('relaunch-overlay').classList.remove('hidden');
     } else if (message.winnerId === localId) {
       this.cuts++;
+      this._recordProgress('cut');
       const pts = 150 * this.combo;
       this.score += pts;
       this.combo = Math.min(8, this.combo + 1);
@@ -700,8 +713,72 @@ class Pipa3DGame {
     this.sound.playSocada(0.6);
   }
 
+  _getActiveRivals() {
+    return this.gameMode === 'duelo' ? this.rivals.slice(0, 1) : this.rivals;
+  }
+
+  _renderCareerHub() {
+    const profile = this.progression.profile;
+    const nextXp = this.progression.xpForNextLevel;
+    const set = (id, value) => {
+      const element = document.getElementById(id);
+      if (element) element.textContent = value;
+    };
+    set('profile-level', profile.level);
+    set('profile-rank-title', this.progression.rankTitle);
+    set('profile-xp-label', `${profile.xp.toLocaleString('pt-BR')} / ${nextXp.toLocaleString('pt-BR')} XP`);
+    set('profile-coins', profile.coins.toLocaleString('pt-BR'));
+    set('profile-total-cuts', profile.stats.cuts.toLocaleString('pt-BR'));
+    set('profile-total-catches', profile.stats.catches.toLocaleString('pt-BR'));
+    const xpFill = document.getElementById('profile-xp-fill');
+    if (xpFill) xpFill.style.width = `${Math.min(100, profile.xp / nextXp * 100)}%`;
+    const list = document.getElementById('mission-list');
+    if (list) {
+      list.innerHTML = this.progression.getMissions().map((mission) => {
+        const pct = Math.min(100, mission.progress / mission.target * 100);
+        const status = mission.claimed ? 'CONCLUÍDA' : `${mission.progress}/${mission.target}`;
+        return `<article class="mission-item ${mission.claimed ? 'done' : ''}">
+          <div class="mission-top"><strong>${mission.title}</strong><span class="mission-reward">+${mission.coins} 🪙</span></div>
+          <p>${mission.description}</p>
+          <div class="mission-progress-row"><span>${status}</span><span>+${mission.xp} XP</span></div>
+          <div class="mission-progress-track"><div class="mission-progress-fill" style="width:${pct}%"></div></div>
+        </article>`;
+      }).join('');
+    }
+  }
+
+  _recordProgress(event, amount = 1) {
+    const result = this.progression.record(event, amount);
+    this._renderCareerHub();
+    if (result.levelsGained > 0) {
+      this.showBanner('SUBIU DE NÍVEL!', `Nível ${this.progression.profile.level} • +${result.coinsEarned} moedas`, 'catch');
+    } else if (result.completedMissions.length) {
+      this.showBanner('MISSÃO CONCLUÍDA!', `${result.completedMissions.join(', ')} • +${result.coinsEarned} moedas`, 'catch');
+    }
+    return result;
+  }
+
   setGameMode(mode) {
+    const previousMode = this.gameMode;
     this.gameMode = mode;
+    if (mode === 'duelo') {
+      this.rivals.forEach((rival, index) => {
+        if (index === 0) {
+          if (!rival.kite.active) rival.kite.spawnInSky(true);
+          rival.ai.respawnTimer = 0;
+        } else {
+          rival.kite.active = false;
+          rival.kite.visual.setVisible(false);
+          rival.kite.lineMesh.visible = false;
+          rival.ai.respawnTimer = 1e9;
+        }
+      });
+    } else if (previousMode === 'duelo') {
+      this.rivals.forEach((rival) => {
+        if (!rival.kite.active) rival.kite.spawnInSky(true);
+        rival.ai.respawnTimer = 0;
+      });
+    }
     const badge = document.getElementById('hud-mode-badge');
     const zenBox = document.getElementById('zen-wind-box');
 
@@ -714,6 +791,9 @@ class Pipa3DGame {
       zenBox.classList.add('hidden');
     } else if (mode === 'online') {
       badge.textContent = 'SALA ONLINE • MULTIPLAYER';
+      zenBox.classList.add('hidden');
+    } else if (mode === 'duelo') {
+      badge.textContent = 'ARENA 1 CONTRA 1';
       zenBox.classList.add('hidden');
     } else {
       badge.textContent = 'VOO LIVRE ZEN • SEM CORTES';
@@ -1080,11 +1160,12 @@ class Pipa3DGame {
   _processCombatAndCollisions(dt) {
     // Reset relo flags
     this.playerKite.inRelo = false;
-    for (const r of this.rivals) r.kite.inRelo = false;
+    const activeRivals = this._getActiveRivals();
+    for (const r of activeRivals) r.kite.inRelo = false;
 
     const activeKites = [];
     if (this.playerKite.active) activeKites.push(this.playerKite);
-    for (const r of this.rivals) {
+    for (const r of activeRivals) {
       if (r.kite.active) activeKites.push(r.kite);
     }
 
@@ -1093,6 +1174,7 @@ class Pipa3DGame {
     let closestRivalPt = new THREE.Vector3();
     let closestPlayerU = -1;
     let closestPlayerCrossingQuality = 0;
+    let closestPlayerOpponentIntegrity = 1;
     let playerReloIntensity = 0;
     let playerReloSpeed = 0;
 
@@ -1120,6 +1202,7 @@ class Pipa3DGame {
           this.effects.emitSparks(dk.position, 14, true);
           if (k.isPlayer) {
             this.catches++;
+            this._recordProgress('catch');
             const pts = 250 * this.combo;
             this.score += pts;
             this.combo = Math.min(8, this.combo + 1);
@@ -1182,10 +1265,12 @@ class Pipa3DGame {
             closestPlayerPt.copy(_bestPtA);
             closestRivalPt.copy(_bestPtB);
             closestPlayerU = bestI / STRING_SEGMENTS;
+            closestPlayerOpponentIntegrity = kB.lineIntegrity;
           } else {
             closestPlayerPt.copy(_bestPtB);
             closestRivalPt.copy(_bestPtA);
             closestPlayerU = bestJ / STRING_SEGMENTS;
+            closestPlayerOpponentIntegrity = kA.lineIntegrity;
           }
         }
 
@@ -1266,6 +1351,7 @@ class Pipa3DGame {
         playerInFront,
         inRelo: this.playerKite.inRelo,
         integrity: this.playerKite.lineIntegrity,
+        opponentIntegrity: closestPlayerOpponentIntegrity,
         crossingQuality: closestPlayerCrossingQuality
       };
       this.effects.updateProximityCue(cue, this.camera);
@@ -1341,6 +1427,7 @@ class Pipa3DGame {
             this.effects.emitSparks(tailNodes[t], 8, false);
             if (attacker.isPlayer) {
               this.score += 60;
+              this._recordProgress('tailCut');
               this.sound.playSocada(0.9);
               this.showBanner('RASPÃO!', `Cortou a rabiola de ${defender.name} — Ficou Rabicó! +60`, 'normal');
             } else if (defender.isPlayer) {
@@ -1399,12 +1486,14 @@ class Pipa3DGame {
 
       if (winner.isPlayer) {
         this.cuts++;
+        this._recordProgress('cut');
         const basePts = 150 * this.combo;
         const weakLineBonus = loser.lineType.cutPower > winner.lineType.cutPower ? 100 : 0;
         const pts = basePts + weakLineBonus;
         this.score += pts;
         const comboLabel = this.combo >= 6 ? 'HEXA' : this.combo === 5 ? 'PENTA' : this.combo === 4 ? 'QUADRA' : this.combo === 3 ? 'TRIPLO' : this.combo === 2 ? 'DUPLO' : '';
         this.combo = Math.min(8, this.combo + 1);
+        this.progression.updateCombo(this.combo);
         this.sound.playCut(true);
         const bonusText = `${comboLabel ? ` • ${comboLabel}` : ''}${weakLineBonus ? ' • BÔNUS LINHA FRACA' : ''}`;
         this.showBanner('MANDOU!', `Cortou ${loser.name} ${moveName}! +${pts} pts${bonusText}`, 'normal');
@@ -1438,13 +1527,19 @@ class Pipa3DGame {
     const titleEl = document.getElementById('prox-title');
     const distEl = document.getElementById('prox-dist');
     const hintEl = document.getElementById('prox-hint');
-    const meterEl = document.getElementById('relo-meter-player');
+    const playerMeter = document.getElementById('relo-meter-player');
+    const rivalMeter = document.getElementById('relo-meter-rival');
+    const playerHp = Math.max(0, Math.round(cue.integrity * 100));
+    const rivalHp = Math.max(0, Math.round((cue.opponentIntegrity ?? 1) * 100));
+    playerMeter.style.width = `${playerHp}%`;
+    rivalMeter.style.width = `${rivalHp}%`;
+    document.getElementById('prox-player-hp').textContent = `${playerHp}%`;
+    document.getElementById('prox-rival-hp').textContent = `${rivalHp}%`;
 
     if (cue.inRelo) {
       card.classList.add('in-relo');
       titleEl.textContent = '🔥 RELO! LINHAS CRUZANDO!';
       distEl.textContent = 'ATRITO!';
-      meterEl.style.width = `${Math.max(8, cue.integrity * 100)}%`;
       if (cue.crossingQuality >= 0.72) hintEl.textContent = 'CRUZAMENTO LIMPO — toque em DAR LINHA no tempo certo para a largada!';
       else if (cue.crossingQuality >= 0.34) hintEl.textContent = 'ÂNGULO MÉDIO — ajuste a posição antes de descarregar a linha.';
       else hintEl.textContent = 'ENTRADA RUIM — linhas quase paralelas; reposicione ou você pode perder.';
@@ -1452,7 +1547,6 @@ class Pipa3DGame {
       card.classList.remove('in-relo');
       titleEl.textContent = cue.playerInFront ? 'LINHA PELA FRENTE' : 'LINHA POR TRÁS';
       distEl.textContent = `${cue.distance.toFixed(1)}m`;
-      meterEl.style.width = `${Math.max(15, (1 - cue.distance / 8.5) * 100)}%`;
       const approachHint = cue.crossingQuality >= 0.72
         ? 'Ângulo bom — aguarde o contato e faça a largada.'
         : cue.crossingQuality >= 0.34
@@ -1644,7 +1738,7 @@ class Pipa3DGame {
 
     // 5. Update Rival AI Kites
     const difficulty = this.gameMode === 'torneio' ? 0.9 + this.tournamentWave * 0.16 : 1.0;
-    for (const r of this.rivals) {
+    for (const r of this._getActiveRivals()) {
       const aiControls = r.ai.update({
         playerKite: this.playerKite,
         allRivals: this.rivals,
