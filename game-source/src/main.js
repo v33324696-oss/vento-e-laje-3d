@@ -270,6 +270,15 @@ class Pipa3DGame {
       document.getElementById('online-name').value = nickname;
     });
 
+    // Graphics profile adapts render scale and shadows to the device.
+    const qualitySelect = document.getElementById('graphics-quality');
+    let savedQuality = 'balanced';
+    try { savedQuality = localStorage.getItem('vento-laje-graphics') || savedQuality; } catch {}
+    if (!['performance', 'balanced', 'high'].includes(savedQuality)) savedQuality = 'balanced';
+    qualitySelect.value = savedQuality;
+    this._applyGraphicsQuality(savedQuality, false);
+    qualitySelect.addEventListener('change', () => this._applyGraphicsQuality(qualitySelect.value));
+
     // Populate Oficina options
     this._populateOficina();
   }
@@ -724,6 +733,26 @@ class Pipa3DGame {
     this.playerKite.setLineType(this.playerConfig.lineTypeId);
     this.carretilha.setLineColor(LINE_TYPES[this.playerConfig.lineTypeId].hex);
     this.sound.playSocada(0.6);
+  }
+
+  _applyGraphicsQuality(level = 'balanced', persist = true) {
+    const presets = {
+      performance: { desktopRatio: 1.05, mobileRatio: 0.9, shadows: false },
+      balanced: { desktopRatio: 1.55, mobileRatio: 1.2, shadows: true },
+      high: { desktopRatio: 2.0, mobileRatio: 1.5, shadows: true }
+    };
+    const preset = presets[level] || presets.balanced;
+    const maxRatio = this.isMobileLayout ? preset.mobileRatio : preset.desktopRatio;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxRatio));
+    this.renderer.shadowMap.enabled = preset.shadows;
+    this.renderer.shadowMap.needsUpdate = true;
+    this.renderer.setSize(window.innerWidth, window.innerHeight, false);
+    this.playerKite.setResolution(window.innerWidth, window.innerHeight);
+    for (const rival of this.rivals) rival.kite.setResolution(window.innerWidth, window.innerHeight);
+    this.graphicsQuality = level;
+    if (persist) {
+      try { localStorage.setItem('vento-laje-graphics', level); } catch {}
+    }
   }
 
   _getActiveRivals() {
