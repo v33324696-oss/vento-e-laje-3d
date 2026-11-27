@@ -33,7 +33,7 @@ class Pipa3DGame {
     this.started = false;
     this.gameMode = 'festival'; // 'festival' | 'torneio' | 'zen'
     this.matchDifficulty = 'normal';
-    this.weatherOrder = ['tarde', 'pordosol', 'ventania', 'nublado'];
+    this.weatherOrder = ['tarde', 'pordosol', 'ventania', 'nublado', 'chuva'];
     this.weatherIdx = 0;
 
     this.cameraModes = [
@@ -78,6 +78,8 @@ class Pipa3DGame {
     this.playerKiteInHand = false;
     this.characterMoveSpeed = 0;
     this.selectedMap = 'laje';
+    this.previousMapBeforeHome = 'laje';
+    this.craftStage = 0;
     this.remotePlayers = new Map();
     this.lastNetSendMs = 0;
     this.onlineRoomCode = null;
@@ -198,6 +200,8 @@ class Pipa3DGame {
       });
 
       const ai = new RivalAIController(rivalKite, personalities[idx % personalities.length]);
+      const savedRivalry = this.progression.getRivalry(spot.name);
+      ai.rivalryHeat = Math.min(1.35, savedRivalry.heat * 0.12);
       this.rivals.push({ kite: rivalKite, ai, previousReleaseHeld: false });
     });
     this.playerKite.condition = this.progression.getKiteCondition(this.playerConfig.modelId);
@@ -308,6 +312,10 @@ class Pipa3DGame {
   }
 
   _launchPlayerKite(launchQuality = this.launchTapQuality) {
+    if (this.selectedMap === 'casa') {
+      this.showBanner('VOLTE PARA A LAJE', 'Dentro de casa você pode montar pipas e explorar. Saia para empinar.', 'danger');
+      return false;
+    }
     if (!this.started || !this.playerKiteInHand || this.launchTapCount < 3) return false;
     const avatar = this.world.playerAvatar;
     const runSpeed = THREE.MathUtils.clamp(this.characterMoveSpeed, 0, 8.2);
@@ -417,6 +425,12 @@ class Pipa3DGame {
     document.getElementById('btn-open-garage-start')?.addEventListener('click', () => this.openGarage());
     document.getElementById('btn-close-garage')?.addEventListener('click', () => document.getElementById('garage-modal')?.classList.add('hidden'));
     document.getElementById('btn-upgrade-house')?.addEventListener('click', () => this._upgradeHouse());
+    document.getElementById('btn-enter-home')?.addEventListener('click', () => this.enterHome());
+    document.getElementById('btn-exit-home')?.addEventListener('click', () => this.leaveHome());
+    document.getElementById('btn-time')?.addEventListener('click', () => {
+      const rate = this.world.cycleTimeSpeed();
+      document.getElementById('label-time-rate').textContent = rate;
+    });
     document.getElementById('btn-replay')?.addEventListener('click', () => this._toggleReplay());
     document.getElementById('btn-weather').addEventListener('click', () => this.cycleWeather());
     document.getElementById('btn-oficina').addEventListener('click', () => this.openOficina());
@@ -507,8 +521,9 @@ class Pipa3DGame {
     this._applyGraphicsQuality(savedQuality, false);
     qualitySelect.addEventListener('change', () => this._applyGraphicsQuality(qualitySelect.value));
 
-    // Populate Oficina options
+    // Populate Oficina options and the hands-on three-step kite crafting bench.
     this._populateOficina();
+    this._initCraftingStation();
   }
 
   _applyMapSelection(mapId) {
@@ -523,11 +538,21 @@ class Pipa3DGame {
     this.carretilha.getLineExitWorldPosition(this.playerKite.anchorPos);
     this._preparePlayerKiteInHand();
 
-    this.rivals.forEach((rival, index) => {
-      const spot = result.rivalSpots[index % result.rivalSpots.length];
-      rival.kite.anchorPos.copy(spot.anchor);
-      rival.kite.spawnInSky();
-    });
+    if (this.selectedMap === 'casa') {
+      this.rivals.forEach((rival) => {
+        rival.kite.active = false;
+        rival.kite.visual.setVisible(false);
+        rival.kite.lineMesh.visible = false;
+        rival.ai.respawnTimer = 1e9;
+      });
+    } else {
+      this.rivals.forEach((rival, index) => {
+        const spot = result.rivalSpots[index % result.rivalSpots.length];
+        rival.kite.anchorPos.copy(spot.anchor);
+        rival.kite.spawnInSky();
+        rival.ai.respawnTimer = 0;
+      });
+    }
 
     this.characterMode = false;
     this.world.playerAvatar.visible = true;
@@ -537,15 +562,21 @@ class Pipa3DGame {
     document.getElementById('label-explore').textContent = 'Explorar';
     const labels = {
       laje: 'Laje do Bairro', praia: 'Praia', parque: 'Parque',
-      campinho: 'Campinho', morro: 'Mirante do Morro'
+      campinho: 'Campinho', morro: 'Mirante do Morro', casa: 'Minha Casa'
     };
+    document.getElementById('btn-exit-home')?.classList.toggle('hidden', this.selectedMap !== 'casa');
     document.getElementById('selected-map-label').textContent = labels[this.selectedMap] || labels.laje;
     document.querySelectorAll('.map-option').forEach((button) => {
       button.classList.toggle('selected', button.dataset.map === this.selectedMap);
     });
     if (this.started) {
       this._enterPreLaunchMode();
-      this.showBanner('NOVO CENÁRIO', `${labels[this.selectedMap]} selecionado. Corra e solte a pipa quando estiver pronto.`, 'normal');
+      if (this.selectedMap === 'casa') {
+        document.getElementById('label-explore').textContent = 'Explorar casa';
+        this.showBanner('EM CASA', 'Explore os cômodos, visite a oficina e depois volte para a laje para empinar.', 'catch');
+      } else {
+        this.showBanner('NOVO CENÁRIO', `${labels[this.selectedMap]} selecionado. Corra e solte a pipa quando estiver pronto.`, 'normal');
+      }
     }
   }
 
@@ -583,6 +614,10 @@ class Pipa3DGame {
         avatar.position.x = THREE.MathUtils.clamp(avatar.position.x, -4.6, 4.6);
         avatar.position.z = THREE.MathUtils.clamp(avatar.position.z, 10.7, 19.2);
         avatar.position.y = 9.74;
+      } else if (this.selectedMap === 'casa') {
+        avatar.position.x = THREE.MathUtils.clamp(avatar.position.x, -12.4, 12.4);
+        avatar.position.z = THREE.MathUtils.clamp(avatar.position.z, -8.7, 8.3);
+        avatar.position.y = 0.02;
       } else {
         avatar.position.x = THREE.MathUtils.clamp(avatar.position.x, -52, 52);
         avatar.position.z = THREE.MathUtils.clamp(avatar.position.z, -52, 52);
@@ -1006,8 +1041,31 @@ class Pipa3DGame {
 
   openGarage() {
     this.progression.visitGarage();
+    this.world.setHomeDecorations(this.progression.profile.house.decorations);
     this._renderGarage();
     document.getElementById('garage-modal')?.classList.remove('hidden');
+  }
+
+  enterHome() {
+    if (!this.started) this.startGame();
+    if (this.selectedMap !== 'casa') this.previousMapBeforeHome = this.selectedMap || 'laje';
+    document.getElementById('garage-modal')?.classList.add('hidden');
+    this.world.setHomeDecorations(this.progression.profile.house.decorations);
+    this._applyMapSelection('casa');
+    this.characterMode = true;
+    this._enterPreLaunchMode();
+    document.getElementById('btn-exit-home')?.classList.remove('hidden');
+    document.getElementById('label-explore').textContent = 'Explorar casa';
+    this.showBanner('MINHA CASA', 'A oficina fica na bancada. Caminhe pela casa e use “Voltar à Laje” para sair.', 'catch');
+  }
+
+  leaveHome() {
+    if (this.selectedMap !== 'casa') return;
+    const destination = ['laje', 'praia', 'parque', 'campinho', 'morro'].includes(this.previousMapBeforeHome)
+      ? this.previousMapBeforeHome : 'laje';
+    this._applyMapSelection(destination);
+    document.getElementById('btn-exit-home')?.classList.add('hidden');
+    this.showBanner('DE VOLTA AO BAIRRO', 'A pipa está na sua mão. Escolha um ponto e volte a empinar.', 'normal');
   }
 
   _renderGarage() {
@@ -1021,6 +1079,7 @@ class Pipa3DGame {
     set('garage-coin-count', this.progression.profile.coins.toLocaleString('pt-BR'));
     set('garage-repair-count', this.progression.profile.stats.repairs.toLocaleString('pt-BR'));
     set('garage-recovery-count', house.recoveredKites.length.toLocaleString('pt-BR'));
+    this.world.setHomeDecorations(house.decorations);
     const upgrade = document.getElementById('btn-upgrade-house');
     if (upgrade) {
       upgrade.disabled = house.level >= 3;
@@ -1105,6 +1164,22 @@ class Pipa3DGame {
           <time>${new Date(entry.at).toLocaleDateString('pt-BR')}</time>
         </article>`).join('') || '<p class="garage-empty">Seus próximos cortes vão aparecer aqui.</p>';
     }
+
+    const rivalryList = document.getElementById('garage-rivalry-list');
+    if (rivalryList) {
+      rivalryList.innerHTML = this.progression.profile.rivalries
+        .slice().sort((a, b) => (b.playerCuts + b.playerLosses) - (a.playerCuts + a.playerLosses))
+        .map((rival) => `<article class="garage-rivalry-item"><strong>${escapeText(rival.name)}</strong><span>Você cortou ${rival.playerCuts} · Ele cortou você ${rival.playerLosses}</span><b>${rival.heat >= 5 ? 'RIVALIDADE QUENTE' : 'RIVALIDADE ATIVA'}</b></article>`)
+        .join('') || '<p class="garage-empty">Os pipeiros vão lembrar de você depois dos primeiros confrontos.</p>';
+    }
+    const craftList = document.getElementById('garage-craft-history');
+    if (craftList) craftList.innerHTML = this.progression.profile.craftLog.slice(0, 6).map((item) => `
+      <article class="garage-craft-item"><strong>${KITE_MODELS[item.modelId]?.name || item.modelId}</strong><span>${item.paper} · ${item.frame} · rabiola ${item.tail}</span><b>Qualidade ${item.quality}%</b></article>`
+    ).join('') || '<p class="garage-empty">As pipas fabricadas na oficina aparecerão aqui.</p>';
+    const neighborhoodList = document.getElementById('garage-neighborhood-list');
+    if (neighborhoodList) neighborhoodList.innerHTML = this.progression.getNeighborhoods().map((item) => `
+      <article class="garage-neighborhood-item"><div><strong>${item.name}</strong><small>${item.title}</small></div><b>${item.points} REP</b><div class="garage-neighborhood-track"><i style="width:${Math.min(100, item.progress)}%"></i></div></article>`
+    ).join('');
   }
 
   _upgradeHouse() {
@@ -1135,6 +1210,56 @@ class Pipa3DGame {
     }
   }
 
+  _initCraftingStation() {
+    const modelSelect = document.getElementById('craft-model');
+    const button = document.getElementById('btn-craft-step');
+    if (!modelSelect || !button) return;
+    modelSelect.innerHTML = Object.values(KITE_MODELS).map((model) => `<option value="${model.id}">${model.name}</option>`).join('');
+    modelSelect.value = this.playerConfig.modelId;
+    button.addEventListener('click', () => this._advanceCrafting());
+  }
+
+  _advanceCrafting() {
+    const status = document.getElementById('craft-status');
+    const progress = document.getElementById('craft-progress');
+    const button = document.getElementById('btn-craft-step');
+    const steps = [
+      { detail: 'As varetas foram medidas e alinhadas.' },
+      { detail: 'O papel foi esticado e colado na armação.' }
+    ];
+    if (this.craftStage < 2) {
+      status.textContent = steps[this.craftStage].detail;
+      this.craftStage += 1;
+      progress.style.width = `${this.craftStage / 3 * 100}%`;
+      button.textContent = this.craftStage === 1 ? 'CONTINUAR · 2/3' : 'FINALIZAR · 3/3';
+      return;
+    }
+    const recipe = {
+      modelId: document.getElementById('craft-model').value,
+      paper: document.getElementById('craft-paper').value,
+      frame: document.getElementById('craft-frame').value,
+      tail: document.getElementById('craft-tail').value
+    };
+    const result = this.progression.craftKite(recipe);
+    this.craftStage = 0;
+    progress.style.width = '0%';
+    button.textContent = 'INICIAR FABRICAÇÃO · 1/3';
+    if (!result.ok) {
+      status.textContent = result.reason;
+      this.showBanner('FABRICAÇÃO BLOQUEADA', result.reason, 'danger');
+      return;
+    }
+    status.textContent = `Pipa pronta! Qualidade de montagem: ${result.quality}%. Custo: ${result.cost} moedas.`;
+    if (this.playerKiteInHand) {
+      this.playerConfig.modelId = recipe.modelId;
+      this.playerConfig.tailStyle = recipe.modelId === 'raia' ? 'sem' : recipe.tail;
+      this.applyPlayerCustomization();
+    }
+    this._renderCareerHub();
+    if (!document.getElementById('garage-modal')?.classList.contains('hidden')) this._renderGarage();
+    this.showBanner('PIPA FABRICADA!', `${KITE_MODELS[recipe.modelId]?.name || recipe.modelId} entrou na sua coleção com ${result.quality}% de qualidade.`, 'catch');
+  }
+
   _renderCareerHub() {
     const profile = this.progression.profile;
     const nextXp = this.progression.xpForNextLevel;
@@ -1152,6 +1277,12 @@ class Pipa3DGame {
     if (onlineName && !onlineName.matches(':focus')) onlineName.value = profile.nickname;
     const xpFill = document.getElementById('profile-xp-fill');
     if (xpFill) xpFill.style.width = `${Math.min(100, profile.xp / nextXp * 100)}%`;
+    const reputationList = document.getElementById('profile-neighborhood-reputation');
+    if (reputationList) reputationList.innerHTML = this.progression.getNeighborhoods().map((item) => `
+      <article class="profile-reputation-item"><div><strong>${item.name}</strong><small>${item.title} · ${item.points} REP</small></div><div class="profile-reputation-track"><i style="width:${Math.min(100, item.progress)}%"></i></div></article>`
+    ).join('');
+    const tournamentCount = document.getElementById('profile-tournament-wins');
+    if (tournamentCount) tournamentCount.textContent = profile.stats.tournamentWins.toLocaleString('pt-BR');
     const list = document.getElementById('mission-list');
     if (list) {
       list.innerHTML = this.progression.getMissions().map((mission) => {
@@ -1256,7 +1387,7 @@ class Pipa3DGame {
 
   _syncWeatherLabel() {
     const wId = this.weatherOrder[this.weatherIdx];
-    const shortNames = { tarde: 'Tarde', pordosol: 'Pôr do Sol', ventania: 'Ventania', nublado: 'Nublado' };
+    const shortNames = { tarde: 'Tarde', pordosol: 'Pôr do Sol', ventania: 'Ventania', nublado: 'Nublado', chuva: 'Chuva' };
     document.getElementById('label-weather').textContent = shortNames[wId] || 'Tarde';
   }
 
@@ -1688,6 +1819,7 @@ class Pipa3DGame {
     const recovered = session.kite;
     const modelName = KITE_MODELS[recovered.modelId]?.name || 'pipa avoada';
     this.progression.recordRecovery(recovered.modelId);
+    this.progression.recordReputation(this.selectedMap, 8);
     recovered.alive = false;
     this.rabiolaLock = null;
     this.rabiolaReelHeld = false;
@@ -2040,6 +2172,7 @@ class Pipa3DGame {
             this.effects.emitSparks(tailNodes[t], 8, false);
             if (attacker.isPlayer) {
               this.score += 60;
+              this.progression.recordReputation(this.selectedMap, 4);
               this._recordProgress('tailCut');
               this.sound.playSocada(0.9);
               this.showBanner('RASPÃO!', `Cortou a rabiola de ${defender.name} — Ficou Rabicó! +60`, 'normal');
@@ -2084,6 +2217,11 @@ class Pipa3DGame {
     else if (winner.tension > 0.78) moveName = 'na puxada';
 
     if (loser.isPlayer) {
+      const victoriousRival = this.rivals.find((entry) => entry.kite === winner);
+      victoriousRival?.ai.onPlayerVictory();
+      this.progression.recordRivalry(winner.name, 'loss');
+      this.progression.recordReputation(this.selectedMap, 2);
+      this._renderCareerHub();
       // Player was cut!
       this.playerLaunched = false;
       this.playerKiteInHand = false;
@@ -2102,11 +2240,14 @@ class Pipa3DGame {
       // Rival was cut!
       const rivalEntry = this.rivals.find((r) => r.kite === loser);
       if (rivalEntry) {
+        rivalEntry.ai.onPlayerCut();
         const respawnDelay = this.matchDifficulty === 'hard' ? 2.8 : this.matchDifficulty === 'easy' ? 5.2 : 4.2;
         rivalEntry.ai.onCut(respawnDelay);
       }
 
       if (winner.isPlayer) {
+        this.progression.recordRivalry(loser.name, 'win');
+        this.progression.recordReputation(this.selectedMap, 12);
         this.cuts++;
         this._recordProgress('cut');
         const basePts = 150 * this.combo;
@@ -2131,10 +2272,12 @@ class Pipa3DGame {
         if (this.gameMode === 'torneio' && this.cuts % 3 === 0) {
           this.tournamentWave++;
           this.score += 300;
+          const reward = this.progression.recordTournamentRound(this.selectedMap);
+          this._renderCareerHub();
           document.getElementById('hud-mode-badge').textContent =
             `TORNEIO REI DA LAJE • RODADA ${this.tournamentWave}`;
           setTimeout(() => {
-            this.showBanner('NOVA RODADA!', `Rodada ${this.tournamentWave} — O vento apertou! +300 Bônus`, 'catch');
+            this.showBanner('RODADA CONQUISTADA!', `Rodada ${this.tournamentWave} • +300 pts • +${reward.coinsEarned} moedas • +${reward.xpEarned} XP`, 'catch');
           }, 1400);
         }
       } else {
@@ -2295,6 +2438,8 @@ class Pipa3DGame {
     document.getElementById('stat-cuts').textContent = this.cuts;
     document.getElementById('stat-catches').textContent = this.catches;
     document.getElementById('stat-combo').textContent = `x${this.combo}`;
+    const clock = document.getElementById('label-time');
+    if (clock) clock.textContent = this.world.getClockLabel();
 
     const windKmh = Math.round(this.windVec.length() * 3.6);
     document.getElementById('val-wind').textContent = windKmh;

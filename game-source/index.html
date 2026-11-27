@@ -71,9 +71,15 @@
       </button>
       <button id="btn-garage" class="hud-btn glass-card" title="Abrir Casa e Garagem"><span class="btn-icon">🏠</span><span>Casa</span></button>
       <button id="btn-replay" class="hud-btn glass-card hidden" title="Assistir replay cinematográfico"><span class="btn-icon">🎬</span><span>Replay</span></button>
-      <button id="btn-weather" class="hud-btn glass-card" title="Mudar Horário e Vento">
-        <span class="btn-icon">☀️</span>
+      <button id="btn-weather" class="hud-btn glass-card" title="Mudar clima">
+        <span class="btn-icon">🌦️</span>
         <span id="label-weather">Tarde</span>
+      </button>
+      <button id="btn-time" class="hud-btn glass-card" title="Alternar velocidade do ciclo de dia e noite">
+        <span class="btn-icon">🕒</span><span id="label-time">15:30</span><small id="label-time-rate">1×</small>
+      </button>
+      <button id="btn-exit-home" class="hud-btn glass-card hidden" title="Sair de casa e voltar ao bairro">
+        <span class="btn-icon">↩️</span><span>Voltar à Laje</span>
       </button>
       <button id="btn-explore" class="hud-btn glass-card" title="Controlar o personagem (Tecla V)">
         <span class="btn-icon">🧍</span>
@@ -293,6 +299,10 @@
         <div class="mission-heading"><div><span class="section-eyebrow">OBJETIVOS DE CARREIRA</span><h2>Missões do pipeiro</h2></div><span class="mission-reset">PROGRESSO SALVO</span></div>
         <div id="mission-list" class="mission-list"></div>
       </section>
+      <section class="career-reputation-panel">
+        <div class="mission-heading"><div><span class="section-eyebrow">RECONHECIMENTO LOCAL</span><h2>Reputação por bairro</h2></div><span class="mission-reset">RODADAS <b id="profile-tournament-wins">0</b></span></div>
+        <div id="profile-neighborhood-reputation" class="profile-reputation-list"></div>
+      </section>
 
       <section class="graphics-settings">
         <div><span class="section-eyebrow">PERSONALIZE SUA EXPERIÊNCIA</span><strong>Qualidade gráfica</strong><small>Ajuste sombras e resolução para seu aparelho.</small></div>
@@ -374,6 +384,17 @@
       </div>
 
       <div class="oficina-body">
+        <section class="craft-station">
+          <div class="craft-station-heading"><div><span class="section-eyebrow">BANCADA DE FABRICAÇÃO</span><h3>Monte sua própria pipa</h3><p>Escolha o formato e os materiais. A fabricação leva três etapas e registra a qualidade na coleção.</p></div><span class="craft-station-icon">🛠️</span></div>
+          <div class="craft-options">
+            <label>MODELO<select id="craft-model"></select></label>
+            <label>PAPEL<select id="craft-paper"><option value="seda">Papel de seda</option><option value="leve">Papel leve</option><option value="resistente">Papel resistente</option></select></label>
+            <label>ARMAÇÃO<select id="craft-frame"><option value="bambu">Bambu</option><option value="fibra">Fibra flexível</option><option value="reforcada">Armação reforçada</option></select></label>
+            <label>RABIOLA<select id="craft-tail"><option value="padrao">Padrão</option><option value="longa">Longa</option><option value="curta">Curta</option><option value="sem">Sem rabiola</option></select></label>
+          </div>
+          <div class="craft-progress-track"><i id="craft-progress"></i></div>
+          <div class="craft-step-footer"><span id="craft-status">1/3 · Corte as varetas, estique o papel e finalize a rabiola.</span><button id="btn-craft-step" type="button" class="primary-cta">INICIAR FABRICAÇÃO · 1/3</button></div>
+        </section>
         <div class="oficina-section">
           <label class="sec-label">MODELO DA PIPA</label>
           <div id="opt-models" class="option-grid"></div>
@@ -406,7 +427,8 @@
               <button class="opt-chip active" data-weather="tarde">☀️ Tarde de Sol (15h30)</button>
               <button class="opt-chip" data-weather="pordosol">🌇 Pôr do Sol Dourado (17h45)</button>
               <button class="opt-chip" data-weather="ventania">💨 Manhã de Ventania (09h30)</button>
-              <button class="opt-chip" data-weather="nublado">☁️ Céu Nublado (16h20)</button>
+              <button class="opt-chip" data-weather="nublado">☁️ Céu Nublado</button>
+              <button class="opt-chip" data-weather="chuva">🌧️ Chuva fraca</button>
             </div>
           </div>
         </div>
@@ -438,7 +460,7 @@
       </div>
       <div class="garage-section-head">
         <div><span class="section-eyebrow">ESTADO DO SEU EQUIPAMENTO</span><h3>Minhas pipas</h3></div>
-        <button id="btn-upgrade-house" class="secondary-cta">AMPLIAR CASA · 850 🪙</button>
+        <div class="garage-action-row"><button id="btn-enter-home" class="secondary-cta">🚪 ENTRAR NA CASA</button><button id="btn-upgrade-house" class="secondary-cta">AMPLIAR CASA · 850 🪙</button></div>
       </div>
       <div id="garage-kite-list" class="garage-kite-grid"></div>
 
@@ -453,10 +475,14 @@
         </section>
       </div>
 
-      <section class="garage-feature garage-decor-section">
-        <div class="garage-section-head"><div><span class="section-eyebrow">DEIXE A CASA COM SUA CARA</span><h3>Decorações da laje</h3></div></div>
-        <div id="garage-decoration-list" class="garage-decoration-list"></div>
-      </section>
+      <div class="garage-extra-grid garage-systems-grid">
+        <section class="garage-feature"><div class="garage-section-head"><div><span class="section-eyebrow">DESAFIOS DO BAIRRO</span><h3>Reputação local</h3></div></div><div id="garage-neighborhood-list" class="garage-neighborhood-list"></div></section>
+        <section class="garage-feature"><div class="garage-section-head"><div><span class="section-eyebrow">PIPEIROS QUE VOCÊ ENFRENTOU</span><h3>Rivalidades</h3></div></div><div id="garage-rivalry-list" class="garage-rivalry-list"></div></section>
+      </div>
+      <div class="garage-extra-grid">
+        <section class="garage-feature"><div class="garage-section-head"><div><span class="section-eyebrow">OFICINA</span><h3>Últimas pipas fabricadas</h3></div></div><div id="garage-craft-history" class="garage-craft-history"></div></section>
+        <section class="garage-feature garage-decor-section"><div class="garage-section-head"><div><span class="section-eyebrow">DEIXE A CASA COM SUA CARA</span><h3>Decorações da laje</h3></div></div><div id="garage-decoration-list" class="garage-decoration-list"></div></section>
+      </div>
 
       <p class="garage-note">O vento, as rajadas e as manobras desgastam a estrutura. Faça manutenção para recuperar a resistência e o voo. As pipas resgatadas ficam registradas na sua coleção.</p>
     </section>

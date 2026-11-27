@@ -18,3 +18,15 @@ test('rival memory decays when a player stops repeating a habit', () => {
   for (let i = 0; i < 120; i++) observeOpponentMemory(memory, { active: false }, 1 / 60);
   assert.ok(memory.right < learned);
 });
+
+
+test('rival AI remembers being cut and prepares a rematch', async () => {
+  const { RivalAIController } = await import('../src/ai.js');
+  const kite = { active: false, visual: { setVisible() {} }, lineMesh: { visible: false } };
+  const ai = new RivalAIController(kite, 'hunter');
+  ai.onPlayerCut();
+  assert.ok(ai.rivalryHeat > 0.8);
+  assert.equal(ai.rivalryRememberedCuts, 1);
+  ai.onCut(2);
+  assert.ok(ai.rivalryHeat > 0.8);
+});

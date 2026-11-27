@@ -91,3 +91,44 @@ test('house decorations respect level and coin requirements', () => {
   assert.equal(store.buyDecoration('trofeu_copa').ok, true);
   assert.ok(store.profile.house.decorations.includes('trofeu_copa'));
 });
+
+
+test('neighborhood reputation and championship rounds are saved with rewards', () => {
+  const storage = new MemoryStorage();
+  const store = new ProgressionStore(storage);
+  store.recordReputation('laje', 40);
+  const reward = store.recordTournamentRound('laje');
+  const loaded = new ProgressionStore(storage);
+  assert.equal(loaded.profile.stats.tournamentWins, 1);
+  assert.equal(loaded.profile.reputation.laje, 64);
+  assert.equal(loaded.profile.reputation.praia, 0);
+  assert.equal(reward.coinsEarned, 150);
+  assert.equal(loaded.getNeighborhoodRank('laje').title, 'Chegando agora');
+});
+
+test('rivalry records distinguish cuts and losses and survive reload', () => {
+  const storage = new MemoryStorage();
+  const store = new ProgressionStore(storage);
+  store.recordRivalry('Juninho da Laje', 'win');
+  store.recordRivalry('Juninho da Laje', 'loss');
+  const loaded = new ProgressionStore(storage);
+  const rival = loaded.getRivalry('Juninho da Laje');
+  assert.equal(rival.playerCuts, 1);
+  assert.equal(rival.playerLosses, 1);
+  assert.equal(rival.heat, 2);
+});
+
+test('kite crafting validates materials, charges the correct price and saves the recipe', () => {
+  const storage = new MemoryStorage();
+  const store = new ProgressionStore(storage);
+  const tooExpensive = store.craftKite({ modelId: 'raia', paper: 'resistente', frame: 'reforcada', tail: 'longa' });
+  assert.equal(tooExpensive.ok, false);
+  store.profile.coins = 1000;
+  const crafted = store.craftKite({ modelId: 'raia', paper: 'resistente', frame: 'reforcada', tail: 'longa' });
+  assert.equal(crafted.ok, true);
+  assert.ok(crafted.quality >= 90);
+  const loaded = new ProgressionStore(storage);
+  assert.ok(loaded.profile.house.ownedKites.includes('raia'));
+  assert.equal(loaded.profile.stats.craftedKites, 1);
+  assert.equal(loaded.profile.craftLog[0].frame, 'reforcada');
+});
