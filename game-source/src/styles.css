@@ -1289,3 +1289,85 @@ button { touch-action: manipulation; }
   .graphics-settings { margin-bottom: 14px; padding: 8px 10px; }
   .graphics-settings select { min-width: 110px; }
 }
+
+
+/* Manual kite launch, match difficulty and online room lobby */
+.difficulty-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 20px;
+  padding: 13px 15px;
+  text-align: left;
+  border: 1px solid rgba(125,211,252,.2);
+  border-radius: 13px;
+  background: rgba(2,6,23,.42);
+}
+.difficulty-panel > div { display: flex; flex-direction: column; gap: 4px; }
+.difficulty-panel strong { color: white; font-size: 13px; }
+.difficulty-panel small { color: var(--text-muted); font-size: 10px; }
+.difficulty-panel select,
+.online-subpanel select {
+  min-width: 205px;
+  padding: 11px 12px;
+  color: white;
+  background: rgba(2,6,23,.72);
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 10px;
+  font: 700 12px var(--font-ui);
+}
+.online-choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.online-choice-card {
+  min-height: 126px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  text-align: left;
+  color: white;
+  background: rgba(255,255,255,.055);
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 13px;
+  cursor: pointer;
+  transition: .16s ease;
+}
+.online-choice-card:hover { background: rgba(56,189,248,.12); border-color: rgba(125,211,252,.6); transform: translateY(-1px); }
+.online-choice-card > span { font-size: 25px; }
+.online-choice-card strong { font-size: 11px; }
+.online-choice-card small { color: var(--text-muted); font-size: 10px; line-height: 1.4; }
+.online-subpanel {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 14px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 12px;
+  background: rgba(2,6,23,.36);
+}
+.online-panel-title { color: var(--gold); font-size: 11px; font-weight: 900; letter-spacing: .08em; }
+.online-subpanel select { width: 100%; min-width: 0; }
+.online-subpanel .primary-cta, .online-subpanel .secondary-cta { width: 100%; }
+.online-panel-hint { color: var(--text-muted); font-size: 10px; line-height: 1.45; }
+.online-advanced { padding: 3px 0; }
+.online-advanced summary { color: var(--text-muted); font-size: 10px; cursor: pointer; }
+.online-advanced input { margin-top: 9px; }
+.online-lobby { display: flex; flex-direction: column; gap: 10px; }
+.online-player-list {
+  padding: 10px 12px;
+  color: #a7f3d0;
+  background: rgba(16,185,129,.09);
+  border: 1px solid rgba(52,211,153,.22);
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 820px) {
+  .difficulty-panel { align-items: stretch; flex-direction: column; gap: 9px; }
+  .difficulty-panel select { width: 100%; min-width: 0; min-height: 44px; font-size: 14px; }
+  .online-choice-grid { grid-template-columns: 1fr; }
+  .online-choice-card { min-height: 96px; }
+}
