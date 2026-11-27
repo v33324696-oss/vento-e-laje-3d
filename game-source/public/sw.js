@@ -1,4 +1,4 @@
-const CACHE = 'vento-laje-shell-v5';
+const CACHE = 'vento-laje-shell-v6';
 const CORE = ['/', '/manifest.webmanifest', '/pipa.svg', '/icons/pipa-192.png', '/icons/pipa-512.png'];
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(CORE)).then(() => self.skipWaiting()));
@@ -18,9 +18,11 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   if (new URL(request.url).pathname.startsWith('/assets/')) {
-    event.respondWith(caches.match(request).then((cached) => cached || fetch(request).then((response) => {
+    // Prefer the current deploy's asset. Keep a cached copy only as an
+    // offline fallback, so long-lived tabs never pin an old game bundle.
+    event.respondWith(fetch(request, { cache: 'no-store' }).then((response) => {
       if (response.ok) caches.open(CACHE).then((cache) => cache.put(request, response.clone()));
       return response;
-    })));
+    }).catch(() => caches.match(request)));
   }
 });

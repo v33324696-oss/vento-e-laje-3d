@@ -1571,7 +1571,14 @@ class Pipa3DGame {
     const status = document.getElementById('boot-status');
     try {
       this.sound.init();
-      if (!this.playerKiteInHand) this._preparePlayerKiteInHand();
+
+      // Normalize the very first playable state every time a fresh match
+      // starts. This prevents an old sky-spawned 58m kite from surviving
+      // into the new hand-launch flow.
+      if (this.world.playerSpawn) this.world.playerAvatar.position.copy(this.world.playerSpawn);
+      this.world.playerAvatar.rotation.set(0, Math.PI, 0);
+      this.playerLaunched = false;
+      this._preparePlayerKiteInHand();
       this.started = true;
       welcome?.classList.add('hidden');
       document.getElementById('hud-top')?.classList.remove('hud-hidden');
@@ -2739,7 +2746,9 @@ class Pipa3DGame {
     const windDeg = THREE.MathUtils.radToDeg(Math.atan2(this.windVec.x, -this.windVec.z));
     document.getElementById('wind-arrow').style.transform = `rotate(${windDeg.toFixed(1)}deg)`;
 
-    document.getElementById('val-line').textContent = Math.round(this.playerKite.lineLength);
+    document.getElementById('val-line').textContent = this.playerKiteInHand
+      ? 'NA MÃO'
+      : `${Math.round(this.playerKite.lineLength)}m`;
     const tailPct = Math.round(this.playerKite.visual.getTailRatio() * 100);
     const tailEl = document.getElementById('val-tail');
     tailEl.textContent = tailPct < 55 ? `Rabicó (${tailPct}%)` : `${tailPct}%`;
@@ -3138,9 +3147,21 @@ const bootPipaGame = () => {
   }
 
   if ('serviceWorker' in navigator && !import.meta.env.DEV) {
-    const registerWorker = () => navigator.serviceWorker.register('/sw.js').catch((error) => {
-      console.warn('[Vento & Laje] atualização offline indisponível:', error);
-    });
+    const registerWorker = async () => {
+      // A new worker takes control after a deploy; reload once so an already
+      // open tab cannot keep running the previous game bundle.
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (window.__pipaWorkerReloading) return;
+        window.__pipaWorkerReloading = true;
+        window.location.reload();
+      });
+      try {
+        const registration = await navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' });
+        await registration.update();
+      } catch (error) {
+        console.warn('[Vento & Laje] atualização offline indisponível:', error);
+      }
+    };
     if (document.readyState === 'complete') registerWorker();
     else window.addEventListener('load', registerWorker, { once: true });
   }
