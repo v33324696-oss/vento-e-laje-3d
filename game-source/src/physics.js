@@ -114,6 +114,12 @@ export class KiteEntity {
     this.disbicarBoost = 0;
     this.disbicarDir = 1;
     this.disbicarCooldown = 0;
+    this.spinTimer = 0;
+    this.spinDirection = 1;
+    this.spinCooldown = 0;
+    this.retaoBoost = 0;
+    this.retaoHeading = 0;
+    this.retaoCooldown = 0;
     this.reloContactTime = 0;
     this.tailCutCooldown = 0;
     this.largadaBoost = 0;
@@ -225,6 +231,24 @@ export class KiteEntity {
     this.disqueBoost = 1.0;
     this.disqueCooldown = 0.62;
     this.tension = 1.0;
+  }
+
+  triggerSpin(dir = 1) {
+    if (!this.active || this.spinCooldown > 0 || this.retaoBoost > 0.05) return false;
+    this.spinDirection = Math.sign(dir) || 1;
+    this.spinTimer = 0.72;
+    this.spinCooldown = 1.15;
+    this.angularVel = this.spinDirection * 5.8;
+    return true;
+  }
+
+  triggerRetao() {
+    if (!this.active || this.retaoCooldown > 0 || this.spinTimer > 0.05) return false;
+    this.retaoHeading = this.noseAngle;
+    this.retaoBoost = 0.62;
+    this.retaoCooldown = 1.25;
+    this.angularVel *= 0.12;
+    return true;
   }
 
   triggerDisbicar(dir = 1) {
@@ -344,6 +368,10 @@ export class KiteEntity {
     this.disbicarBoost *= Math.pow(0.035, stepDt);
     if (this.disqueCooldown > 0) this.disqueCooldown = Math.max(0, this.disqueCooldown - stepDt);
     if (this.disbicarCooldown > 0) this.disbicarCooldown = Math.max(0, this.disbicarCooldown - stepDt);
+    if (this.spinCooldown > 0) this.spinCooldown = Math.max(0, this.spinCooldown - stepDt);
+    if (this.retaoCooldown > 0) this.retaoCooldown = Math.max(0, this.retaoCooldown - stepDt);
+    if (this.spinTimer > 0) this.spinTimer = Math.max(0, this.spinTimer - stepDt);
+    if (this.retaoBoost > 0) this.retaoBoost = Math.max(0, this.retaoBoost - stepDt);
     if (this.largadaCooldown > 0) this.largadaCooldown = Math.max(0, this.largadaCooldown - stepDt);
     if (this.largadaBoost > 0) this.largadaBoost = Math.max(0, this.largadaBoost - stepDt);
     if (this.largadaTagTimer > 0) this.largadaTagTimer = Math.max(0, this.largadaTagTimer - stepDt);
@@ -378,11 +406,12 @@ export class KiteEntity {
     // Steering is a heading target, not an endless angular-speed command.
     // Manual controls return the nose toward center when released; AI supplies
     // its own world-relative target so every kite uses the same stable servo.
-    const steerTarget = THREE.MathUtils.clamp(
+    let steerTarget = THREE.MathUtils.clamp(
       Number.isFinite(controls.steerTarget) ? controls.steerTarget : steer * 0.78,
       -Math.PI,
       Math.PI
     );
+    if (this.retaoBoost > 0.05) steerTarget = this.retaoHeading;
     let headingError = steerTarget - this.noseAngle;
     while (headingError > Math.PI) headingError -= Math.PI * 2;
     while (headingError < -Math.PI) headingError += Math.PI * 2;
@@ -394,6 +423,7 @@ export class KiteEntity {
     );
     const angularResponse = 1 - Math.exp(-stepDt * (13 + spec.turnMult * 3));
     this.angularVel += (targetAngularVelocity - this.angularVel) * angularResponse;
+    if (this.spinTimer > 0) this.angularVel = this.spinDirection * 8.8;
 
     // Untrimmed kites retain a little natural wobble, but it cannot overpower
     // the pilot's heading target.
@@ -464,7 +494,9 @@ export class KiteEntity {
     // Steering is applied as a closed-loop lateral velocity command after integration.
 
     // Hand inputs remain impulses layered on top of the aerodynamic flight.
-    _DesiredVel.addScaledVector(_noseDir, this.socadaBoost * 8.0 + this.disbicarBoost * 4.0 + (controls.pull ? 0.3 : 0));
+    _DesiredVel.addScaledVector(_noseDir,
+      this.socadaBoost * 8.0 + this.disbicarBoost * 4.0
+      + this.retaoBoost * 11.0 + (controls.pull ? 0.3 : 0));
     if (this.disqueBoost > 0.01) {
       _DesiredVel.addScaledVector(_tRight, this.disqueDir * this.disqueBoost * 13.0 * spec.speedMult);
     }
@@ -483,12 +515,12 @@ export class KiteEntity {
     // Because this runs in KiteEntity.update, every kite model and AI rival gets it.
     const steeringDemand = Math.abs(steer);
     const pullDemand = controls.pull ? 1 : 0;
-    const maneuverDemand = Math.max(steeringDemand, pullDemand);
+    const maneuverDemand = Math.max(steeringDemand, pullDemand, this.retaoBoost > 0.05 ? 1 : 0);
     if (maneuverDemand > 0.02) {
       const windFactor = THREE.MathUtils.clamp(this.localWind.length() / 9, 0.62, 1.42);
       const activeInput = pullDemand + steeringDemand * 0.65 + this.disbicarBoost * 0.35;
       const desiredForwardSpeed = THREE.MathUtils.clamp(
-        (activeInput * 9.8 + this.socadaBoost * 5.0 + this.disbicarBoost * 4.0)
+        (activeInput * 9.8 + this.socadaBoost * 5.0 + this.disbicarBoost * 4.0 + this.retaoBoost * 5.5)
           * spec.speedMult * windFactor,
         0,
         18
