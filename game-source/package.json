@@ -6,7 +6,7 @@
   "description": "Jogo 3D realista de Pipa Brasileira — Vento, Laje, Carretilha e Combate Aéreo",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173",
-    "build": "vite build",
+    "build": "node --test && vite build",
     "preview": "vite preview --host 0.0.0.0 --port 5173",
     "server": "node server.js",
     "dev:all": "node run-dev.js",
