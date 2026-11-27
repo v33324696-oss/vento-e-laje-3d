@@ -616,8 +616,21 @@
         }
 
         const startButton = target?.closest('#btn-start-game');
-        if (!startButton || (window.pipaGame && typeof window.pipaGame.startGame === 'function')) return;
+        if (!startButton) return;
         event.preventDefault();
+        event.stopImmediatePropagation();
+
+        // Capture the primary action at document level so it still works if a
+        // later optional UI binding fails during initialization.
+        if (window.pipaGame && typeof window.pipaGame.startGame === 'function') {
+          try {
+            window.pipaGame.startGame();
+          } catch (error) {
+            console.error('[Vento & Laje] não foi possível abrir a partida:', error);
+            showBootStatus('Não foi possível iniciar a partida: ' + (error?.message || String(error)) + ' Recarregue a página e tente novamente.');
+          }
+          return;
+        }
 
         if (window.__pipaBootError) {
           const details = window.__pipaBootError.message || String(window.__pipaBootError);

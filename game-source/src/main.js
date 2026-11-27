@@ -1492,6 +1492,8 @@ class Pipa3DGame {
   }
 
   startGame() {
+    // Starting is idempotent: repeated clicks/taps cannot reset the launch flow.
+    if (this.started) return true;
     this.sound.init();
     this.started = true;
     document.getElementById('welcome-modal')?.classList.add('hidden');
