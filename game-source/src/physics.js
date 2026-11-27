@@ -462,21 +462,29 @@ export class KiteEntity {
     this.velocity.addScaledVector(_DesiredVel, stepDt);
     this.velocity.multiplyScalar(Math.exp(-0.018 * stepDt));
 
-    // Closed-loop movement control in the tether's tangent plane. The kite
-    // reaches the commanded lateral velocity quickly and smoothly recenters
-    // when the input is released, instead of continuing to drift or spin.
-    const lateralVelocity = this.velocity.dot(_tRight);
-    const desiredLateralVelocity = steer * THREE.MathUtils.clamp(
-      6.0 + apparentSpeed * 0.36,
-      6.0,
-      10.5
-    );
-    const steeringResponse = Math.abs(steer) > 0.02 ? 14 : 2.8;
-    const steeringBlend = 1 - Math.exp(-stepDt * steeringResponse);
-    this.velocity.addScaledVector(
-      _tRight,
-      (desiredLateralVelocity - lateralVelocity) * steeringBlend
-    );
+    // Pilot flight authority: Phase 1 moved from a controlled velocity model
+    // to pure aerodynamic acceleration. Keep the aerodynamic forces above, but
+    // restore a responsive speed command along the kite's actual nose direction.
+    // Because this runs in KiteEntity.update, every kite model and AI rival gets it.
+    const steeringDemand = Math.abs(steer);
+    const pullDemand = controls.pull ? 1 : 0;
+    const maneuverDemand = Math.max(steeringDemand, pullDemand);
+    if (maneuverDemand > 0.02) {
+      const windFactor = THREE.MathUtils.clamp(this.localWind.length() / 9, 0.62, 1.42);
+      const activeInput = pullDemand + steeringDemand * 0.65 + this.disbicarBoost * 0.35;
+      const desiredForwardSpeed = THREE.MathUtils.clamp(
+        (activeInput * 9.8 + this.socadaBoost * 5.0 + this.disbicarBoost * 4.0)
+          * spec.speedMult * windFactor,
+        0,
+        18
+      );
+      const currentForwardSpeed = this.velocity.dot(_noseDir);
+      const driveResponse = 1 - Math.exp(-stepDt * (steeringDemand > 0.02 ? 10.5 : 8.0));
+      this.velocity.addScaledVector(
+        _noseDir,
+        (desiredForwardSpeed - currentForwardSpeed) * driveResponse
+      );
+    }
 
     this.position.addScaledVector(this.velocity, stepDt);
 
