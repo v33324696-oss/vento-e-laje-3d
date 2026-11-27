@@ -28,8 +28,8 @@ test('kite damage is saved and repair restores condition', () => {
   const storage = storageWith();
   const store = new ProgressionStore(storage);
   store.profile.coins = 500;
-  const condition = store.damageKite('raia', 25);
-  assert.equal(condition, 75);
+  const condition = store.damageKite('raia', 5);
+  assert.equal(condition, 95);
   const repair = store.repairKite('raia');
   assert.equal(repair.ok, true);
   assert.equal(store.getKiteCondition('raia'), 100);
