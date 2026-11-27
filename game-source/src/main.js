@@ -2191,7 +2191,8 @@ class Pipa3DGame {
       minGroundY: playerGroundY,
       reloHighlightU: combatInfo.playerHighlightU,
       reloHighlightStrength: combatInfo.reloIntensity > 0 ? 1.0 : 0.45,
-      dt
+      dt,
+      time: elapsed
     });
 
     // 5. Update Rival AI Kites
@@ -2225,7 +2226,8 @@ class Pipa3DGame {
         minGroundY: gY,
         reloHighlightU: r.kite.inRelo ? 0.7 : -1,
         reloHighlightStrength: r.kite.inRelo ? 0.9 : 0,
-        dt
+        dt,
+        time: elapsed
       });
     }
 
