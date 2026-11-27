@@ -1,4 +1,4 @@
-const STORAGE_KEY = 'vento-laje-profile-v2';
+const STORAGE_KEY = 'vento-laje-profile-v1';
 
 const KITE_IDS = [
   'murcha', 'raia', 'latao', 'peixinho', 'papagaio', 'delta',
