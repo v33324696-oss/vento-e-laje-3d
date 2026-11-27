@@ -4,6 +4,7 @@ import {
   KITE_MODEL_IDS,
   KITE_AERO_PROFILES,
   calculateAerodynamicForces,
+  calculateLiftCoefficient,
   getKiteAeroProfile,
   getWindPhase,
   sampleWindAt
@@ -77,4 +78,31 @@ test('wind gusts are deterministic but vary with time and position', () => {
   assert.deepEqual(first, same);
   assert.notDeepEqual(first, later);
   assert.notDeepEqual(first, elsewhere);
+});
+
+test('angle of attack increases lift up to the peak angle', () => {
+  const low = calculateLiftCoefficient(0.08, 0.48);
+  const peak = calculateLiftCoefficient(0.30, 0.48);
+  assert.ok(peak > low);
+  assert.ok(peak <= 1);
+});
+
+test('excessive angle of attack causes stall and reduces lift', () => {
+  const attached = calculateAerodynamicForces({
+    airVelocity: air, spanDirection: span, forwardDirection: forward,
+    modelId: 'murcha', angleOfAttack: 0.30
+  });
+  const stalled = calculateAerodynamicForces({
+    airVelocity: air, spanDirection: span, forwardDirection: forward,
+    modelId: 'murcha', angleOfAttack: 0.78
+  });
+  assert.equal(attached.stalled, false);
+  assert.equal(stalled.stalled, true);
+  assert.ok(stalled.lift < attached.lift);
+  assert.ok(stalled.drag > attached.drag);
+});
+
+test('kite models have different stall thresholds', () => {
+  assert.notEqual(KITE_AERO_PROFILES.raia.stallAngle, KITE_AERO_PROFILES.rokkaku.stallAngle);
+  assert.notEqual(KITE_AERO_PROFILES.delta.stallAngle, KITE_AERO_PROFILES.capucheta.stallAngle);
 });
