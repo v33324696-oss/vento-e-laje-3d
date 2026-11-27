@@ -4,55 +4,55 @@ import { createWoodSpoolTexture } from './textures.js';
 export const LINE_TYPES = {
   rosa_chilena: {
     id: 'rosa_chilena', name: 'Linha esportiva rosa', color: 0xff2e93, hex: '#ff2e93',
-    cutPower: 1.12, drag: 1.0, desc: 'Linha de competição representada de forma arcade no jogo.'
+    cutPower: 1.12, drag: 1.0, desc: 'Linha de competição representada de forma arcade no jogo.', durability: 0.78, recovery: 0.3
   },
   branca_pura: {
     id: 'branca_pura', name: 'Algodão nº 10', color: 0xf8fafc, hex: '#f8fafc',
-    cutPower: 0.82, drag: 0.92, desc: 'Linha clássica de algodão, visual discreto e resposta suave.'
+    cutPower: 0.82, drag: 0.92, desc: 'Linha clássica de algodão, visual discreto e resposta suave.', durability: 1.05, recovery: 0.55
   },
   verde_neon: {
     id: 'verde_neon', name: 'Nylon multifilamento', color: 0xa3e635, hex: '#a3e635',
-    cutPower: 0.92, drag: 0.88, desc: 'Fio sintético flexível com baixa resistência ao arrasto no jogo.'
+    cutPower: 0.92, drag: 0.88, desc: 'Fio sintético flexível com baixa resistência ao arrasto no jogo.', durability: 0.94, recovery: 0.48
   },
   azul_celeste: {
     id: 'azul_celeste', name: 'Poliéster trançado', color: 0x38bdf8, hex: '#38bdf8',
-    cutPower: 0.86, drag: 0.96, desc: 'Trama estável, boa leitura visual e comportamento equilibrado.'
+    cutPower: 0.86, drag: 0.96, desc: 'Trama estável, boa leitura visual e comportamento equilibrado.', durability: 1, recovery: 0.52
   },
   algodao_24: {
     id: 'algodao_24', name: 'Algodão nº 24', color: 0xf5deb3, hex: '#f5deb3',
-    cutPower: 0.74, drag: 1.08, desc: 'Linha de algodão mais encorpada, com maior presença no vento.'
+    cutPower: 0.74, drag: 1.08, desc: 'Linha de algodão mais encorpada, com maior presença no vento.', durability: 1.12, recovery: 0.62
   },
   dacron: {
     id: 'dacron', name: 'Dacron / poliéster', color: 0xf97316, hex: '#f97316',
-    cutPower: 0.68, drag: 0.82, desc: 'Linha resistente usada em aplicações de pipa e vela; controle estável.'
+    cutPower: 0.68, drag: 0.82, desc: 'Linha resistente usada em aplicações de pipa e vela; controle estável.', durability: 1.22, recovery: 0.7
   },
   encerada: {
     id: 'encerada', name: 'Algodão encerado', color: 0xeab308, hex: '#eab308',
-    cutPower: 0.9, drag: 0.94, desc: 'Acabamento encerado tradicional, representado sem receita ou instrução de preparo.'
+    cutPower: 0.9, drag: 0.94, desc: 'Acabamento encerado tradicional, representado sem receita ou instrução de preparo.', durability: 0.92, recovery: 0.44
   },
   aramida: {
     id: 'aramida', name: 'Fibra de aramida', color: 0xa78bfa, hex: '#a78bfa',
-    cutPower: 0.98, drag: 0.78, desc: 'Fibra técnica de alta resistência, com comportamento fictício balanceado.'
+    cutPower: 0.98, drag: 0.78, desc: 'Fibra técnica de alta resistência, com comportamento fictício balanceado.', durability: 1.18, recovery: 0.58
   },
   nylon_monofilamento: {
     id: 'nylon_monofilamento', name: 'Nylon monofilamento', color: 0x67e8f9, hex: '#67e8f9',
-    cutPower: 0.62, drag: 0.72, desc: 'Fio liso e pouco visível, com resposta mais elástica no simulador.'
+    cutPower: 0.62, drag: 0.72, desc: 'Fio liso e pouco visível, com resposta mais elástica no simulador.', durability: 1.1, recovery: 0.42
   },
   poliester_fino: {
     id: 'poliester_fino', name: 'Poliéster fino', color: 0xfb7185, hex: '#fb7185',
-    cutPower: 0.78, drag: 0.86, desc: 'Linha leve para voos tranquilos e manobras de precisão.'
+    cutPower: 0.78, drag: 0.86, desc: 'Linha leve para voos tranquilos e manobras de precisão.', durability: 0.98, recovery: 0.5
   },
   linha_tradicional: {
     id: 'linha_tradicional', name: 'Linha tradicional de pipa', color: 0xffffff, hex: '#ffffff',
-    cutPower: 0.8, drag: 1.0, desc: 'Configuração clássica e equilibrada para empinar no modo livre.'
+    cutPower: 0.8, drag: 1.0, desc: 'Configuração clássica e equilibrada para empinar no modo livre.', durability: 1, recovery: 0.5
   },
   dyneema: {
     id: 'dyneema', name: 'UHMWPE (Dyneema)', color: 0x22c55e, hex: '#22c55e',
-    cutPower: 0.88, drag: 0.7, desc: 'Fibra sintética de alto desempenho usada em linhas técnicas; atributos apenas de jogo.'
+    cutPower: 0.88, drag: 0.7, desc: 'Fibra sintética de alto desempenho usada em linhas técnicas; atributos apenas de jogo.', durability: 1.2, recovery: 0.64
   },
   linha_chilena_arcade: {
     id: 'linha_chilena_arcade', name: 'Linha chilena (arcade)', color: 0xf43f5e, hex: '#f43f5e',
-    cutPower: 1.02, drag: 1.04, desc: 'Item fictício de competição dentro do jogo; não representa fabricação nem uso real.'
+    cutPower: 1.02, drag: 1.04, desc: 'Item fictício de competição dentro do jogo; não representa fabricação nem uso real.', durability: 0.8, recovery: 0.34
   }
 };
 
@@ -263,4 +263,4 @@ export class Carretilha3D {
 
 const _camForward = new THREE.Vector3();
 const _camRight = new THREE.Vector3();
-const _camUp = new THREE.Vector3();,,,,,,,,,,,,,\n    durability: 0.8, recovery: 0.34\n    durability: 1.2, recovery: 0.64\n    durability: 1, recovery: 0.5\n    durability: 0.98, recovery: 0.5\n    durability: 1.1, recovery: 0.42\n    durability: 1.18, recovery: 0.58\n    durability: 0.92, recovery: 0.44\n    durability: 1.22, recovery: 0.7\n    durability: 1.12, recovery: 0.62\n    durability: 1, recovery: 0.52\n    durability: 0.94, recovery: 0.48\n    durability: 1.05, recovery: 0.55\n    durability: 0.78, recovery: 0.3
+const _camUp = new THREE.Vector3();
