@@ -27,3 +27,23 @@ test('bad entry and weak angle are disadvantaged',()=>{
  const parallel=evaluateReloScore({...base,crossingQuality:.05});
  assert.ok(clean>wrong*1.6); assert.ok(clean>parallel*2);
 });
+
+test('disbicar increases attack strength without replacing crossing quality', () => {
+  const normal = evaluateReloScore(base);
+  const disbicar = evaluateReloScore({ ...base, disbicar: 1 });
+  const poorAngle = evaluateReloScore({ ...base, disbicar: 1, crossingQuality: 0.05 });
+  assert.ok(disbicar > normal);
+  assert.ok(disbicar > poorAngle);
+});
+
+test('attacking from behind gives a controlled positional advantage', () => {
+  const front = evaluateReloScore({ ...base, rearAdvantage: 0 });
+  const behind = evaluateReloScore({ ...base, rearAdvantage: 1 });
+  assert.ok(behind > front);
+});
+
+test('a kite unloading is more exposed unless its line resists discharge vulnerability', () => {
+  const protectedLine = evaluateReloScore({ ...base, defenderExposure: 0 });
+  const exposedLine = evaluateReloScore({ ...base, defenderExposure: 1 });
+  assert.ok(exposedLine > protectedLine);
+});
