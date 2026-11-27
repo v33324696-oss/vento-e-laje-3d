@@ -15,7 +15,7 @@ import {
 import { RivalAIController } from './ai.js';
 import { evaluateReloScore } from './relo.js';
 import { ProgressionStore } from './progression.js';
-import { getAIDifficulty } from './difficulty.js';
+import { getAIDifficulty, getCombatDamageMultipliers } from './difficulty.js';
 
 class Pipa3DGame {
   constructor() {
@@ -1502,8 +1502,11 @@ class Pipa3DGame {
           const powerB = this._computeCutAttackPower(kB, uB, uA, crossingQuality, relativeSpeed, kA);
 
           // Correct angle, entry height and timing decide who loses line integrity.
-          const damageA = kA.isPlayer ? 1.28 : 0.92;
-          const damageB = kB.isPlayer ? 1.28 : 0.92;
+          const combatDamage = this.gameMode === 'online'
+            ? { playerAttack: 1, rivalAttack: 1 }
+            : getCombatDamageMultipliers(this.matchDifficulty);
+          const damageA = kA.isPlayer ? combatDamage.playerAttack : combatDamage.rivalAttack;
+          const damageB = kB.isPlayer ? combatDamage.playerAttack : combatDamage.rivalAttack;
           kB.lineIntegrity -= powerA * dt * damageA / (kB.lineType.durability || 1);
           kA.lineIntegrity -= powerB * dt * damageB / (kA.lineType.durability || 1);
 
@@ -1690,7 +1693,10 @@ class Pipa3DGame {
     } else {
       // Rival was cut!
       const rivalEntry = this.rivals.find((r) => r.kite === loser);
-      if (rivalEntry) rivalEntry.ai.onCut(4.5);
+      if (rivalEntry) {
+        const respawnDelay = this.matchDifficulty === 'hard' ? 2.8 : this.matchDifficulty === 'easy' ? 5.2 : 4.2;
+        rivalEntry.ai.onCut(respawnDelay);
+      }
 
       if (winner.isPlayer) {
         this.cuts++;
@@ -1998,10 +2004,13 @@ class Pipa3DGame {
     // 7. Continuous Procedural Audio & HUD Telemetry
     this.sound.updateContinuous({
       windSpeed: this.windVec.length(),
-      kiteSpeed: this.playerKite.active ? this.playerKite.velocity.length() : 2,
+      kiteSpeed: this.playerKite.active ? this.playerKite.velocity.length() : 0,
       spoolSpeed: this.playerKite.active ? this.playerKite.reelSpeed : 0,
       reloIntensity: combatInfo.reloIntensity,
       reloSpeed: combatInfo.reloSpeed,
+      kiteModelId: this.playerConfig.modelId,
+      kiteActive: this.playerKite.active,
+      lineTension: this.playerKite.tension,
       dt
     });
 
