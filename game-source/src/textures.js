@@ -41,7 +41,8 @@ export const KITE_PATTERNS = [
   { id: 'roxo_neon', name: 'Roxo Neon', colors: ['#7e22ce', '#e879f9', '#111827', '#67e8f9'] },
   { id: 'prata_fogo', name: 'Prata e Fogo', colors: ['#cbd5e1', '#475569', '#f97316', '#fef3c7'] },
   { id: 'oceano', name: 'Oceano', colors: ['#0e7490', '#06b6d4', '#cffafe', '#1e3a8a'] },
-  { id: 'arco_iris', name: 'Arco-íris', colors: ['#ef4444', '#facc15', '#22c55e', '#3b82f6'] }
+  { id: 'arco_iris', name: 'Arco-íris', colors: ['#ef4444', '#facc15', '#22c55e', '#3b82f6'] },
+  { id: 'hello_kitty', name: 'Hello Kitty 🎀', colors: ['#ffd6e7', '#fffafd', '#ed4a91', '#392735'] }
 ];
 
 const textureCache = new Map();
@@ -272,6 +273,130 @@ export function getKitePatternTexture(patternId) {
         ctx.lineWidth = 3.5;
         ctx.strokeRect(gx * cell, gy * cell, cell, cell);
       }
+    }
+    ctx.restore();
+  } else if (pattern.id === 'hello_kitty') {
+    // Pink tissue-paper background with a hand-cut Hello Kitty face and bow.
+    const pinkWash = ctx.createLinearGradient(0, 0, size, size);
+    pinkWash.addColorStop(0, '#ffe7f0');
+    pinkWash.addColorStop(0.52, '#ffc5dc');
+    pinkWash.addColorStop(1, '#fff0f6');
+    ctx.fillStyle = pinkWash;
+    ctx.fillRect(0, 0, size, size);
+
+    // Small hearts and diagonal pink silk strips around the face.
+    ctx.save();
+    ctx.strokeStyle = 'rgba(226, 72, 137, 0.23)';
+    ctx.lineWidth = 12;
+    for (let x = -size; x < size * 2; x += 74) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x - size * 0.42, size);
+      ctx.stroke();
+    }
+    const drawHeart = (x, y, scale) => {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(scale, scale);
+      ctx.fillStyle = '#f28ab7';
+      ctx.beginPath();
+      ctx.moveTo(0, 15);
+      ctx.bezierCurveTo(-48, -12, -25, -42, 0, -20);
+      ctx.bezierCurveTo(25, -42, 48, -12, 0, 15);
+      ctx.fill();
+      ctx.restore();
+    };
+    drawHeart(86, 100, 0.62);
+    drawHeart(423, 92, 0.58);
+    drawHeart(82, 405, 0.54);
+    drawHeart(432, 410, 0.66);
+    ctx.restore();
+
+    // Kitty ears and rounded white face, outlined like a sewn paper applique.
+    ctx.save();
+    ctx.fillStyle = '#fffafd';
+    ctx.strokeStyle = '#392735';
+    ctx.lineWidth = 9;
+    ctx.beginPath();
+    ctx.moveTo(cx - 91, cy - 29);
+    ctx.lineTo(cx - 123, cy - 145);
+    ctx.quadraticCurveTo(cx - 128, cy - 166, cx - 105, cy - 157);
+    ctx.lineTo(cx - 38, cy - 109);
+    ctx.quadraticCurveTo(cx, cy - 124, cx + 38, cy - 109);
+    ctx.lineTo(cx + 105, cy - 157);
+    ctx.quadraticCurveTo(cx + 128, cy - 166, cx + 123, cy - 145);
+    ctx.lineTo(cx + 91, cy - 29);
+    ctx.bezierCurveTo(cx + 133, cy + 13, cx + 118, cy + 112, cx + 43, cy + 132);
+    ctx.quadraticCurveTo(cx, cy + 148, cx - 43, cy + 132);
+    ctx.bezierCurveTo(cx - 118, cy + 112, cx - 133, cy + 13, cx - 91, cy - 29);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Pink inner ears.
+    ctx.fillStyle = '#f7a7c8';
+    ctx.beginPath();
+    ctx.moveTo(cx - 103, cy - 124);
+    ctx.lineTo(cx - 67, cy - 99);
+    ctx.lineTo(cx - 93, cy - 70);
+    ctx.closePath();
+    ctx.moveTo(cx + 103, cy - 124);
+    ctx.lineTo(cx + 67, cy - 99);
+    ctx.lineTo(cx + 93, cy - 70);
+    ctx.closePath();
+    ctx.fill();
+
+    // Bow on the upper-right ear.
+    ctx.fillStyle = '#ed3f88';
+    ctx.strokeStyle = '#9f2458';
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.moveTo(cx + 68, cy - 91);
+    ctx.bezierCurveTo(cx + 34, cy - 147, cx + 77, cy - 177, cx + 119, cy - 147);
+    ctx.bezierCurveTo(cx + 145, cy - 126, cx + 112, cy - 98, cx + 91, cy - 90);
+    ctx.bezierCurveTo(cx + 135, cy - 80, cx + 157, cy - 46, cx + 124, cy - 30);
+    ctx.bezierCurveTo(cx + 96, cy - 17, cx + 76, cy - 52, cx + 68, cy - 91);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#ffb2d0';
+    ctx.beginPath();
+    ctx.ellipse(cx + 82, cy - 87, 15, 18, -0.18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Eyes, yellow nose, blush and the six signature whiskers.
+    ctx.fillStyle = '#241d27';
+    ctx.beginPath();
+    ctx.ellipse(cx - 43, cy + 13, 8, 15, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx + 43, cy + 13, 8, 15, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#f7c94b';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + 38, 11, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#c28c23';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(244, 139, 180, 0.55)';
+    ctx.beginPath();
+    ctx.ellipse(cx - 76, cy + 49, 18, 10, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx + 76, cy + 49, 18, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = '#392735';
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    const whiskers = [
+      [-73, 22, -122, 8], [-76, 39, -129, 39], [-72, 56, -120, 72],
+      [73, 22, 122, 8], [76, 39, 129, 39], [72, 56, 120, 72]
+    ];
+    for (const [x1, y1, x2, y2] of whiskers) {
+      ctx.beginPath();
+      ctx.moveTo(cx + x1, cy + y1);
+      ctx.lineTo(cx + x2, cy + y2);
+      ctx.stroke();
     }
     ctx.restore();
   } else {

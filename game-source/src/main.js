@@ -48,7 +48,7 @@ class Pipa3DGame {
     // Player customization
     this.playerConfig = {
       modelId: 'murcha',
-      patternId: 'estrela_paulista',
+      patternId: 'hello_kitty',
       lineTypeId: 'rosa_chilena',
       tailStyle: 'padrao'
     };
@@ -119,6 +119,7 @@ class Pipa3DGame {
     this._renderCareerHub();
 
     this.lastFrameMs = performance.now();
+    this.lastRenderMs = this.lastFrameMs;
     this.elapsedTime = 0;
     this.hudUpdateAccumulator = 0;
     this._animate = this._animate.bind(this);
@@ -137,6 +138,7 @@ class Pipa3DGame {
     this.camera.lookAt(this.camLookTarget);
 
     this.isMobileLayout = window.matchMedia('(max-width: 820px), (pointer: coarse)').matches;
+    this.frameInterval = this.isMobileLayout ? 1000 / 30 : 1000 / 45;
     this.renderer = new THREE.WebGLRenderer({
       antialias: false,
       powerPreference: 'high-performance'
@@ -397,7 +399,8 @@ class Pipa3DGame {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.isMobileLayout = window.matchMedia('(max-width: 820px), (pointer: coarse)').matches;
-    this._applyGraphicsQuality(this.graphicsQuality || (this.isMobileLayout ? 'performance' : 'balanced'), false);
+    this.frameInterval = this.isMobileLayout ? 1000 / 30 : 1000 / 45;
+    this._applyGraphicsQuality(this.graphicsQuality || 'performance', false);
 
     this.playerKite.setResolution(w, h);
     for (const r of this.rivals) {
@@ -2656,6 +2659,13 @@ class Pipa3DGame {
     }
 
     const nowMs = performance.now();
+    if (document.hidden) {
+      this.lastFrameMs = nowMs;
+      this.lastRenderMs = nowMs;
+      return;
+    }
+    if (nowMs - this.lastRenderMs < this.frameInterval) return;
+    this.lastRenderMs = nowMs;
     const rawDt = (nowMs - this.lastFrameMs) * 0.001;
     this.lastFrameMs = nowMs;
     const dt = Math.min(0.04, Math.max(0.001, rawDt));

@@ -119,6 +119,8 @@ export class GameWorld {
     this.araCharacterQueue = [];
     this.araCharacterLoads = 0;
     this.araCharacterConcurrency = 1;
+    this.araCharacterDetailBudget = this.isMobilePerformance ? 0 : 8;
+    this.araDetailedNpcCount = 0;
     this.playerMoveSpeed = 0;
     this.cloudMaterial = null;
     this.rainPoints = null;
@@ -521,7 +523,7 @@ export class GameWorld {
     this.playerAvatar.position.set(0, 9.74, 13.9);
     this.scene.add(this.playerAvatar);
     this._queueAraCharacter(this.playerAvatar, PLAYER_ARA_CHARACTER, {
-      detail: 'low',
+      detail: this.isMobilePerformance ? 'low' : 'high',
       targetHeight: 1.78,
       player: true
     });
@@ -529,7 +531,7 @@ export class GameWorld {
 
   _queueAraCharacter(avatar, profile, options = {}) {
     if (!avatar || !profile) return;
-    if (this.isMobilePerformance && options.detail === 'low') {
+    if (this.isMobilePerformance && options.detail === 'low' && !options.player) {
       // Keep the detailed handcrafted fallback for background residents on phones.
       // Only the player's full rigged character is loaded on mobile.
       avatar.userData.araLoading = false;
@@ -537,6 +539,13 @@ export class GameWorld {
       avatar.visible = true;
       return;
     }
+    if (!options.player && this.araDetailedNpcCount >= this.araCharacterDetailBudget) {
+      avatar.userData.araLoading = false;
+      avatar.userData.araSkippedForBudget = true;
+      avatar.visible = true;
+      return;
+    }
+    if (!options.player) this.araDetailedNpcCount += 1;
     avatar.userData.araLoading = true;
     avatar.userData.araReady = false;
     avatar.visible = false;
