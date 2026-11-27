@@ -60,7 +60,7 @@ export class RivalAIController {
           this.targetPoint.copy(chasedDrift.position);
         } else {
           // Priority 2: Engage player or rival kite, or reposition in prime sky zone
-          const engagePlayerChance = this.personality === 'hunter' ? 0.58 : 0.36 * difficulty;
+          const engagePlayerChance = Math.min(0.9, (this.personality === 'hunter' ? 0.58 : 0.36) * difficulty);
           if (playerKite && playerKite.active && Math.random() < engagePlayerChance) {
             // Aim slightly across player's string (75% up player's line) to provoke a real relo!
             const idx = Math.floor(playerKite.stringNodes.length * (0.68 + Math.random() * 0.25));
