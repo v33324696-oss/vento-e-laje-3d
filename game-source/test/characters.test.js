@@ -82,8 +82,12 @@ test('the main player recipe uses a fully dressed rigged streetwear human', () =
   assert.equal(params.hair, 'afro01');
   assert.ok(params.accessories.includes('cuban_chain'));
   assert.ok(params.accessories.includes('silver_cross'));
-  assert.ok(params.tattoos.includes('forearm_l'));
+  assert.ok(params.tattoos.includes('sleeve_r'));
   assert.equal(params.rig, 'game');
+});
+
+test('the reference player has the full tattoo sleeve shown in the concept image', () => {
+  assert.deepEqual(PLAYER_ARA_CHARACTER.params.tattoos, ['sleeve_r']);
 });
 
 test('street residents get deterministic but distinct ages, hair, clothes and seeds', () => {

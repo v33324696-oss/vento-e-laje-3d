@@ -167,7 +167,7 @@ export const PLAYER_ARA_CHARACTER = {
     hairColor: '#17110e',
     facialHair: 'none',
     beardColor: '#17110e',
-    tattoos: ['forearm_l'],
+    tattoos: ['sleeve_r'],
     tattooInk: '#242126',
     earrings: 'studs',
     earringMetal: 'silver',

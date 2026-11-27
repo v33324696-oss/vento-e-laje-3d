@@ -592,6 +592,37 @@ export class GameWorld {
       object.castShadow = true;
       object.receiveShadow = true;
     });
+
+    if (options.player) {
+      // Small white chest mark like the reference image. It is attached to the
+      // actual shirt surface, not floated at a guessed world-space position.
+      human.updateMatrixWorld(true);
+      const chestRay = new THREE.Raycaster(
+        new THREE.Vector3(bounds.max.x * 0.22, bounds.min.y + measuredHeight * 0.72, bounds.max.z + measuredHeight),
+        new THREE.Vector3(0, 0, -1)
+      );
+      const shirtHit = chestRay.intersectObject(human, true).find((hit) => hit.object.isMesh && hit.face);
+      if (shirtHit) {
+        const swoosh = new THREE.Shape();
+        swoosh.moveTo(-0.034, -0.004);
+        swoosh.quadraticCurveTo(-0.002, 0.012, 0.042, 0.014);
+        swoosh.quadraticCurveTo(0.017, 0.004, -0.034, -0.004);
+        swoosh.closePath();
+        const mark = new THREE.Mesh(
+          new THREE.ShapeGeometry(swoosh, 12),
+          new THREE.MeshBasicMaterial({ color: 0xf7f7f5, side: THREE.DoubleSide, depthWrite: false })
+        );
+        const worldNormal = shirtHit.face.normal.clone().transformDirection(shirtHit.object.matrixWorld).normalize();
+        const worldPoint = shirtHit.point.clone().addScaledVector(worldNormal, 0.0018);
+        mark.position.copy(shirtHit.object.worldToLocal(worldPoint));
+        const worldOrientation = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), worldNormal);
+        const parentOrientation = shirtHit.object.getWorldQuaternion(new THREE.Quaternion()).invert();
+        mark.quaternion.copy(parentOrientation.multiply(worldOrientation));
+        mark.renderOrder = 2;
+        shirtHit.object.add(mark);
+      }
+    }
+
     avatar.add(human);
     const mixer = new THREE.AnimationMixer(human);
     const locomotion = character.locomotion(mixer);
