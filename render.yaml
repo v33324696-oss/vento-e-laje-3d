@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: vento-e-laje-3d
+    runtime: node
+    plan: free
+    region: ohio
+    buildCommand: "cat source.part.* | base64 -d > /tmp/game-source.tar.gz && mkdir -p app && tar -xzf /tmp/game-source.tar.gz -C app && cd app && npm ci --include=dev --no-audit --no-fund && npm run build"
+    startCommand: "cd app && npm start"
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
