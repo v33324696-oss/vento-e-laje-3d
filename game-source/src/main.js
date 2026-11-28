@@ -3008,6 +3008,7 @@ class Pipa3DGame {
       minGroundY: playerGroundY,
       reloHighlightU: combatInfo.playerHighlightU,
       reloHighlightStrength: combatInfo.reloIntensity > 0 ? 1.0 : 0.45,
+      lineObstacles: this.world.getStringObstacles(),
       dt,
       time: elapsed
     });
