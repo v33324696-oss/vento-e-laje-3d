@@ -8,7 +8,6 @@ import { evaluateReloScore } from './relo.js';
 import { bankSpanForSteering, getKiteAeroProfile, getWindPhase, sampleWindAt } from './kiteAerodynamics.js';
 import { getKiteMaterialProfile } from './kiteMaterials.js';
 import { calculateHighAngleDrag, stepKiteSteering } from './kiteSteering.js';
-import { VerletStringSimulation } from './ropeSimulation.js';
 
 export const STRING_SEGMENTS = 28;
 
@@ -124,10 +123,12 @@ export class KiteEntity {
     this.inRelo = false;
 
     // Build 3D Catenary String (Line2 for crisp anti-aliased thickness)
-    this.ropeSimulation = new VerletStringSimulation(STRING_SEGMENTS);
-    this.stringNodes = this.ropeSimulation.nodes;
-    this.stringPrevNodes = this.ropeSimulation.previous;
-    this.stringSnag = 0;
+    this.stringNodes = [];
+    this.stringPrevNodes = [];
+    for (let i = 0; i <= STRING_SEGMENTS; i++) {
+      this.stringNodes.push(new THREE.Vector3());
+      this.stringPrevNodes.push(new THREE.Vector3());
+    }
     this.stringRopeReady = false;
     this.stringFlatPos = new Float32Array((STRING_SEGMENTS + 1) * 3);
     this.stringColors = new Float32Array((STRING_SEGMENTS + 1) * 3);
@@ -270,28 +271,33 @@ export class KiteEntity {
     void windVec;
   }
 
-  _updateStringCurve(windVec, highlightU = -1, highlightStrength = 0, dt = 0.016, obstacles = []) {
+  _updateStringCurve(windVec, highlightU = -1, highlightStrength = 0, dt = 0.016) {
     const bridlePos = this.visual.getBridleWorldPosition(_bridleWorld);
-    const result = this.ropeSimulation.update({
-      start: this.anchorPos,
-      end: bridlePos,
-      restLength: this.lineLength,
-      wind: windVec,
-      dt,
-      tension: this.tension,
-      obstacles
-    });
-    this.stringSnag = result.snagAmount;
-    this.stringRopeReady = true;
-
+    _ropeDelta.subVectors(bridlePos, this.anchorPos);
+    const span = _ropeDelta.length();
+    const direction = _ropeDelta.multiplyScalar(1 / Math.max(0.001, span));
+    const slack = Math.max(0, this.lineLength - span);
+    const tensionFactor = THREE.MathUtils.clamp((this.tension - 0.22) / 0.58, 0, 1);
+    const sag = Math.min(2.4, Math.sqrt(Math.max(0, 2 * span * slack)) * 0.075)
+      * (1 - tensionFactor * 0.78);
+    _ropeSide.crossVectors(direction, _worldUp).normalize();
+    if (_ropeSide.lengthSq() < 0.001) _ropeSide.set(1, 0, 0);
+    const windSide = THREE.MathUtils.clamp(windVec.dot(_ropeSide), -8, 8);
+    const windBow = THREE.MathUtils.clamp(windSide * slack * 0.0032 * this.lineType.drag, -0.8, 0.8);
+    const vibration = (this.socadaBoost * 0.012 + highlightStrength * 0.01)
+      * Math.min(1, Math.max(0, dt) * 60);
     const baseColor = _baseCol.setHex(this.lineType.color);
-    const snagColor = _hotCol.setHex(0xf59e0b);
-    baseColor.lerp(snagColor, this.stringSnag * 0.58);
-    const highlightColor = _vertCol.setHex(0xffffff);
+    const hotColor = _hotCol.setHex(0xffffff);
 
     for (let i = 0; i <= STRING_SEGMENTS; i++) {
       const u = i / STRING_SEGMENTS;
+      const parabola = 4 * u * (1 - u);
       const node = this.stringNodes[i];
+      node.lerpVectors(this.anchorPos, bridlePos, u);
+      node.y -= parabola * sag;
+      node.addScaledVector(_ropeSide, parabola * windBow);
+      node.x += Math.sin(u * Math.PI * 5 + performance.now() * 0.006) * vibration * parabola;
+
       this.stringFlatPos[i * 3] = node.x;
       this.stringFlatPos[i * 3 + 1] = node.y;
       this.stringFlatPos[i * 3 + 2] = node.z;
@@ -300,7 +306,7 @@ export class KiteEntity {
       if (highlightU >= 0 && highlightStrength > 0) {
         glow = Math.max(0, 1 - Math.abs(u - highlightU) * 5.5) * highlightStrength;
       }
-      _vertCol.copy(baseColor).lerp(highlightColor, glow);
+      _vertCol.copy(baseColor).lerp(hotColor, glow);
       this.stringColors[i * 3] = _vertCol.r;
       this.stringColors[i * 3 + 1] = _vertCol.g;
       this.stringColors[i * 3 + 2] = _vertCol.b;
@@ -318,7 +324,6 @@ export class KiteEntity {
     minGroundY = 3.0,
     reloHighlightU = -1,
     reloHighlightStrength = 0,
-    lineObstacles = [],
     dt = 0.016
   }) {
     if (!this.active) return;
@@ -343,10 +348,7 @@ export class KiteEntity {
     this.reelSpeed = 0;
 
     if (controls.pull) {
-      // Persistent rope contacts make the winch feel heavier until the string
-      // is guided free; an unobstructed line keeps the original response.
-      const snagResistance = THREE.MathUtils.clamp(this.stringSnag * 0.52, 0, 0.42);
-      this.reelSpeed = -15.5 * spec.speedMult * (1 - snagResistance);
+      this.reelSpeed = -15.5 * spec.speedMult;
       this.lineLength = Math.max(this.minLine, this.lineLength + this.reelSpeed * stepDt);
       targetTension = 0.90;
     } else if (controls.quickRelease) {
@@ -460,19 +462,6 @@ export class KiteEntity {
     );
     _DesiredVel.y += netVertical;
 
-    // A soft altitude ceiling prevents runaway climbs without snapping the kite
-    // to a hard plane. A high kite gradually loses upward drive and drifts down.
-    const altitudeAboveReel = this.position.y - this.anchorPos.y;
-    const ceilingExcess = Math.max(0, altitudeAboveReel - 44);
-    if (ceilingExcess > 0) {
-      const ceilingBrake = THREE.MathUtils.clamp(
-        ceilingExcess * 0.14 + Math.max(0, this.velocity.y) * 0.22,
-        0,
-        5.5
-      );
-      _DesiredVel.y -= ceilingBrake;
-    }
-
     // Match the original kite's smooth, readable acceleration response.
     this.velocity.lerp(_DesiredVel, Math.min(1, stepDt * 7.5));
     this.position.addScaledVector(this.velocity, stepDt);
@@ -526,7 +515,7 @@ export class KiteEntity {
       dt: stepDt
     });
 
-    this._updateStringCurve(flightWind, reloHighlightU, reloHighlightStrength, stepDt, lineObstacles);
+    this._updateStringCurve(flightWind, reloHighlightU, reloHighlightStrength, stepDt);
   }
 
   dispose() {
