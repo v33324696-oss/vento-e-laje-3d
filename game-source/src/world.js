@@ -106,6 +106,7 @@ export class GameWorld {
     this.environmentUpdateAccumulator = 0;
     this.sunDir = new THREE.Vector3(0, 0.5, -0.86).normalize();
     this.rivalSpots = [];
+    this.stringObstacles = [];
     this.clouds = [];
     this.birds = [];
     this.swayingTrees = [];
@@ -296,6 +297,10 @@ export class GameWorld {
     this.hemiLight.intensity = THREE.MathUtils.lerp(0.42, 1.1, Math.max(0, this.sunLight.intensity / 2.2));
     this.scene.fog.color.copy(this.skyUniforms.uHorizon.value);
     this.scene.fog.density = (this.currentPreset.fogDensity || 0.0011) * (hour < 6 || hour > 19 ? 1.16 : 1);
+  }
+
+  getStringObstacles() {
+    return this.mapId === 'laje' ? this.stringObstacles : [];
   }
 
   getTerrainHeight(x, z) {
@@ -517,6 +522,19 @@ export class GameWorld {
     this.windRibbonLine = new THREE.Line(wrGeo, wrMat);
     this.windRibbonLine.frustumCulled = false;
     this.scene.add(this.windRibbonLine);
+
+    // Lightweight rope colliders in world coordinates, aligned with the
+    // actual rooftop slab, parapets, water tank and wind-ribbon pole.
+    this.stringObstacles = [
+      { type: 'box', name: 'laje-slab', min: { x: -5.72, y: 9.44, z: 10.28 }, max: { x: 5.72, y: 9.76, z: 19.72 } },
+      { type: 'box', name: 'mureta-frente', min: { x: -5.62, y: 9.72, z: 10.32 }, max: { x: 5.62, y: 10.72, z: 10.58 } },
+      { type: 'box', name: 'mureta-fundo', min: { x: -5.62, y: 9.72, z: 19.42 }, max: { x: 5.62, y: 10.72, z: 19.68 } },
+      { type: 'box', name: 'mureta-esquerda', min: { x: -5.62, y: 9.72, z: 10.42 }, max: { x: -5.38, y: 10.72, z: 19.58 } },
+      { type: 'box', name: 'mureta-direita', min: { x: 5.38, y: 9.72, z: 10.42 }, max: { x: 5.62, y: 10.72, z: 19.58 } },
+      { type: 'box', name: 'base-caixa-agua', min: { x: -4.86, y: 9.72, z: 16.72 }, max: { x: -2.74, y: 11.16, z: 18.88 } },
+      { type: 'cylinder', name: 'caixa-agua', x: -3.8, z: 17.8, minY: 11.08, maxY: 12.42, radius: 1.02 },
+      { type: 'cylinder', name: 'haste-biruta', x: -3.2, z: 10.45, minY: 10.68, maxY: 12.34, radius: 0.03 }
+    ];
 
     // Player Pipeiro avatar (shown when camera is in aerial chase mode)
     this.playerAvatar = this._createPipeiroCharacter(null, null, { player: true, pose: 'player' });
